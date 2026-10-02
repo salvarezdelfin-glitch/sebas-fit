@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sebas Fit</title>
+<meta name="description" content="Sebas Fit — clases de Sculpt, Fuerza y Barre, rutinas, clientes de personal trainer y cotizaciones en una sola app.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#15120E">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sebas Fit">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/lock.css">
+<link rel="stylesheet" href="css/sculpt.css">
+<link rel="stylesheet" href="css/modulos.css">
+</head>
+<body>
+
+<div id="authgate">
+  <div class="auth-card">
+    <h1>Sebas<b>Fit</b></h1>
+    <p class="sub">Tus datos están cifrados. Escribe tu contraseña para entrar.</p>
+    <div id="auth-msg" class="auth-msg"></div>
+    <form id="lock-form" autocomplete="off">
+      <input type="text" autocomplete="username" value="sebas" hidden aria-hidden="true">
+      <div class="auth-field"><label for="lock-pw">Contraseña</label><input type="password" id="lock-pw" autocomplete="current-password" required></div>
+      <label class="switch" style="margin-bottom:16px"><input type="checkbox" id="lock-remember"><span class="track"></span>Recordar en este dispositivo</label>
+      <button class="btn primary big" style="width:100%" type="submit" id="lock-btn">Entrar</button>
+    </form>
+    <p class="hint" style="margin:16px 0 0;font-size:12px;color:var(--muted-2)">Es la misma contraseña de Clases Semanales. La primera vez necesita internet.</p>
+  </div>
+</div>
+
+<div id="appRoot">
+  <div class="topbar">
+    <div class="wrap">
+      <button class="brand" data-action="go" data-screen="hoy">
+        <span class="mark">SEBAS<b>FIT</b></span><span class="tag">Studio · Gym</span>
+      </button>
+      <nav class="nav" id="nav"></nav>
+      <span id="sync" class="sync" role="status"></span>
+    </div>
+  </div>
+  <div id="conn-banner">No se pudo guardar en este dispositivo — descarga un respaldo en Ajustes para no perder cambios.</div>
+  <main id="app"></main>
+  <div id="overlay"></div>
+  <div id="printDoc"></div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/sculpt.js"></script>
+<script src="js/estacion.js"></script>
+<script src="js/armar.js"></script>
+<script src="js/musica.js"></script>
+<script src="js/clases.js"></script>
+<script src="js/ptlib.js"></script>
+<script src="js/pt.js"></script>
+<script src="js/cot.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
