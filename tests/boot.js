@@ -21,6 +21,6 @@ window.bootTest=async function(opts){
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(v1)));
   fake.versions.push({v:1,iter:1000,salt,iv:b64(iv),ct:b64(ct),savedAt:v1.savedAt});
-  try{ localStorage.clear(); }catch(e){}
+  if(!opts.keep){ try{ localStorage.clear(); }catch(e){} }
   const r=await vaultUnlock(pw,false); enterApp(); return r;
 };

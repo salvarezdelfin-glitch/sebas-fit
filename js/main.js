@@ -29,6 +29,20 @@ function printDoc(html){
   window.addEventListener("afterprint",end); setTimeout(()=>window.print(),60);
 }
 
+/* ---------- instalar en el teléfono / compu ---------- */
+let deferredInstall=null;
+window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); deferredInstall=e; if(state.screen==="hoy") render(); });
+function esIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1); }
+function esStandalone(){ return (window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true; }
+function installHint(){
+  if(esStandalone()||lsGet("sbf_hint_off")) return "";
+  if(deferredInstall) return `<div class="wrap"><div class="install-hint"><div><b>Instala Sebas Fit</b><p>Se abre como app, sin barra del navegador, y funciona sin señal.</p></div><div class="acts"><button class="btn primary" data-action="aj-install">Instalar</button><button class="btn ghost" data-action="aj-hint-off">Ahora no</button></div></div></div>`;
+  if(esIOS()) return `<div class="wrap"><div class="install-hint"><div><b>Instala Sebas Fit en tu iPhone / iPad</b><p>Toca <b>Compartir</b> <span class="ios-share">⬆︎</span> y luego <b>«Agregar a inicio»</b>. Así abre a pantalla completa, funciona sin señal en el estudio y tus datos quedan más seguros en el dispositivo.</p></div><div class="acts"><button class="btn ghost" data-action="aj-hint-off">Entendido</button></div></div></div>`;
+  return "";
+}
+function actualizarAvisoOffline(){ const el=document.getElementById("auth-offline"); if(el) el.style.display=navigator.onLine===false?"block":"none"; }
+window.addEventListener("online",actualizarAvisoOffline); window.addEventListener("offline",actualizarAvisoOffline); actualizarAvisoOffline();
+
 /* ---------- navegación y render ---------- */
 function renderNav(){
   nav.innerHTML=NAV.map(([k,l,screens,go])=>`<button data-action="go" data-screen="${go}" class="${screens.includes(state.screen)?"on":""}">${l}</button>`).join("");
@@ -40,7 +54,7 @@ function subnavHtml(){
 function render(){
   renderNav();
   const s=state.screen; let h="";
-  if(s==="hoy") h=viewClases();
+  if(s==="hoy") h=installHint()+viewClases();
   else if(s==="inicio") h=subnavHtml()+viewInicio();
   else if(s==="planner") h=subnavHtml()+(state.routine?viewPlanner():viewInicio());
   else if(s==="armar") h=subnavHtml()+viewArmar();
@@ -77,6 +91,8 @@ async function ajClick(a){
     el.href=URL.createObjectURL(new Blob([JSON.stringify(blob)],{type:"application/json"})); el.download="sebas-fit-respaldo-"+todayStr()+".json"; document.body.appendChild(el); el.click(); el.remove(); return true; }
   if(a==="aj-restore"){ document.getElementById("aj-file").click(); return true; }
   if(a==="aj-lock"){ vaultLock(); return true; }
+  if(a==="aj-hint-off"){ lsSet("sbf_hint_off","1"); render(); return true; }
+  if(a==="aj-install"){ if(deferredInstall){ deferredInstall.prompt(); deferredInstall=null; } render(); return true; }
   return false;
 }
 
@@ -141,6 +157,7 @@ function enterApp(){
   document.getElementById("authgate").classList.add("hidden");
   document.getElementById("appRoot").classList.add("on");
   hydrateSculpt(); armRegistrarCustom(); ARMS=null; state.screen="hoy"; render();
+  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // pide que el navegador no borre los datos
   musSpotRetorno().then(ok=>{ if(ok){ state.screen="ajustes"; render(); } });
 }
 function authMsg(text,kind){ const el=document.getElementById("auth-msg"); el.textContent=text||""; el.className="auth-msg"+(text?" "+(kind||"err"):""); }

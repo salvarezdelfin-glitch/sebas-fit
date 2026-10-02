@@ -1,10 +1,10 @@
 const fs=require('fs'), vm=require('vm'), path=require('path');
 const src=fs.readFileSync(path.join(__dirname,'../js/core.js'),'utf8');
-function makeEnv(cloud){
+function makeEnv(cloud,sinStreams){
   const store={};
   const ls={getItem:k=>(k in store?store[k]:null),setItem:(k,v)=>{store[k]=String(v)},removeItem:k=>{delete store[k]}};
   const els={};
-  const ctx={console,crypto:globalThis.crypto,TextEncoder,TextDecoder,btoa,atob,CompressionStream,DecompressionStream,Response,
+  const ctx={console,crypto:globalThis.crypto,TextEncoder,TextDecoder,btoa,atob,CompressionStream:sinStreams?undefined:CompressionStream,DecompressionStream:sinStreams?undefined:DecompressionStream,Response,
     localStorage:ls,setTimeout,clearTimeout,Date,Math,JSON,Uint8Array,Promise,Object,Array,Set,String,Number,Error,
     document:{getElementById:id=>els[id]||null,addEventListener(){},hidden:false},
     window:{addEventListener(){}}, fetch:async(url,opt)=>{
@@ -12,7 +12,7 @@ function makeEnv(cloud){
       if(fn==='clases_vault_get'){ const v=cloud.versions.filter(x=>x.vault===a.p_vault); return {ok:true,json:async()=>v.length?v[v.length-1].blob:null}; }
       if(fn==='clases_vault_put'){ if(cloud.offline) throw new Error('offline'); if(a.p_secret!==cloud.secret) return {ok:false,status:403,json:async()=>({})}; cloud.versions.push({vault:a.p_vault,blob:a.p_blob}); return {ok:true,json:async()=>'t'}; }
     }};
-  ctx.globalThis=ctx; vm.createContext(ctx); vm.runInContext(src+'\n;globalThis.__x={Vault,LS,VK,migrate,mergeData,sealPayload,openBlob,deriveKey,writeSecretFor,vaultUnlock,vaultAutoUnlock,pickPayload,touch,saveLocal,flushVault,emptyData,restoreBackup,backupBlob};',ctx);
+  ctx.globalThis=ctx; vm.createContext(ctx); vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/fflate.js'),'utf8').replace('module','_m'),ctx); vm.runInContext(src+'\n;globalThis.__x={Vault,LS,VK,migrate,mergeData,sealPayload,openBlob,deriveKey,writeSecretFor,vaultUnlock,vaultAutoUnlock,pickPayload,touch,saveLocal,flushVault,emptyData,restoreBackup,backupBlob};',ctx);
   return {ctx,x:ctx.__x,store};
 }
 let fails=0; const ok=(c,m)=>{ if(!c){fails++;console.log('FALLA:',m);} else console.log('ok  ',m); };
@@ -75,6 +75,12 @@ let fails=0; const ok=(c,m)=>{ if(!c){fails++;console.log('FALLA:',m);} else con
   const R=makeEnv(cloud); Object.keys(e1.store).forEach(k=>R.ctx.localStorage.setItem(k,e1.store[k]));
   const auto=await R.x.vaultAutoUnlock(); ok(!!auto&&R.x.Vault.data.clases.entries.length>=1,"recordar abre sin contraseña");
   const R2=makeEnv(cloud); R2.ctx.localStorage.setItem("sbf_key_v2",JSON.stringify({salt:"x",k:"AAAA"})); const badAuto=await R2.x.vaultAutoUnlock(); ok(badAuto===null&&!R2.ctx.localStorage.getItem("sbf_key_v2"),"llave recordada inválida se descarta");
+  // 5c) iOS antiguos sin CompressionStream: se usa fflate y el resultado es compatible en ambos sentidos
+  const old=makeEnv(cloud,true); const dev=makeEnv(cloud); await dev.x.vaultUnlock(pw,false); dev.x.Vault.data.clases.entries.push({id:'eZ',date:'2026-10-05',studio:'EJE',amount:300}); dev.x.touch(); await dev.x.saveLocal();
+  const blobNuevo=JSON.parse(dev.ctx.localStorage.getItem('sbf_vault_v2')); ok(blobNuevo.z===1,'dispositivo moderno guarda gzip');
+  const viejo=await old.x.openBlob(await old.x.deriveKey(pw,{salt:blobNuevo.salt,iter:blobNuevo.iter}),blobNuevo); ok(viejo.clases.entries.some(e=>e.id==='eZ'),'iOS sin streams lee lo comprimido');
+  const k2=await old.x.deriveKey(pw,{salt:blobNuevo.salt,iter:blobNuevo.iter}); const sellado=await old.x.sealPayload(k2,{salt:blobNuevo.salt,iter:blobNuevo.iter},{app:2,savedAt:'x',clases:{entries:[{id:'q'}]}}); ok(sellado.z===1,'iOS sin streams también comprime (fflate)');
+  const leido=await dev.x.openBlob(await dev.x.deriveKey(pw,{salt:blobNuevo.salt,iter:blobNuevo.iter}),sellado); ok(leido.clases.entries[0].id==='q','y lo lee un dispositivo moderno');
   // 6) mergeData unitario
   const m=boot.mergeData({clases:{entries:[{id:'1',v:'viejo'},{id:'2'}]},sf:{gustos:['a']}},{clases:{entries:[{id:'1',v:'nuevo'}]},sf:{gustos:['B']}});
   ok(m.clases.entries.length===2&&m.clases.entries.find(e=>e.id==='1').v==='nuevo','merge: gana el nuevo, conserva los que faltan');

@@ -327,3 +327,23 @@
   .arm-input{flex-direction:column} .arm-input .btn{width:100%}
   .auto-list button{flex-direction:column;gap:2px;align-items:flex-start} .auto-list span{white-space:normal}
 }
+
+/* ---------- iPhone / iPad: notch, teclado, toques ---------- */
+html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea,a{touch-action:manipulation}
+.topbar{padding-top:env(safe-area-inset-top)}
+#authgate{padding-top:calc(20px + env(safe-area-inset-top));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.iv{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+.scrim{padding-top:calc(20px + env(safe-area-inset-top));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.modal{max-height:calc(100dvh - 40px)}
+@media (max-width:820px){
+  input,select,textarea,.inp{font-size:16px!important}   /* evita el zoom automático de iOS al tocar un campo */
+}
+.install-hint{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding:14px 18px;border:1px solid var(--accent);background:var(--accent-glow);border-radius:var(--radius)}
+.install-hint p{margin:4px 0 0;font-size:13px;color:var(--ink-dim);max-width:60ch}
+.install-hint .ios-share{display:inline-block;border:1px solid var(--muted-2);border-radius:5px;padding:0 5px;font-size:12px}
+@media (max-width:640px){
+  .sec-head{flex-wrap:wrap;row-gap:8px}
+  .pt-day .sec-head .spacer{display:none}
+  .pt-day .sec-head h3{flex:1 1 100%}
+}

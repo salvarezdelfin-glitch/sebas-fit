@@ -73,11 +73,12 @@ function mergeData(older,newer){
 
 /* ---------- cripto ---------- */
 async function gzipBytes(bytes){
-  if(typeof CompressionStream==="undefined") return null;
+  if(typeof CompressionStream==="undefined"){ try{ return typeof fflate!=="undefined"?fflate.gzipSync(bytes):null; }catch(e){ return null; } }   // iOS < 16.4
   const cs=new CompressionStream("gzip"), w=cs.writable.getWriter(); w.write(bytes); w.close();
   return new Uint8Array(await new Response(cs.readable).arrayBuffer());
 }
 async function gunzipBytes(bytes){
+  if(typeof DecompressionStream==="undefined"){ if(typeof fflate!=="undefined") return fflate.gunzipSync(bytes); throw new Error("sin-gzip"); }
   const ds=new DecompressionStream("gzip"), w=ds.writable.getWriter(); w.write(bytes); w.close();
   return new Uint8Array(await new Response(ds.readable).arrayBuffer());
 }
@@ -103,10 +104,14 @@ async function writeSecretFor(key){
   const h=await crypto.subtle.digest("SHA-256",buf);
   return Array.prototype.map.call(new Uint8Array(h),b=>b.toString(16).padStart(2,"0")).join("");
 }
-async function rpc(fn,args){
-  const r=await fetch(SB_URL+"/rest/v1/rpc/"+fn,{method:"POST",headers:{apikey:SB_KEY,"Content-Type":"application/json"},body:JSON.stringify(args)});
-  if(!r.ok) throw new Error("nube "+r.status);
-  return r.json();
+/* con señal débil una petición puede colgarse: se corta a los N ms para no dejar la app esperando */
+async function rpc(fn,args,ms){
+  const ac=typeof AbortController!=="undefined"?new AbortController():null, t=ac?setTimeout(()=>ac.abort(),ms||10000):null;
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/rpc/"+fn,{method:"POST",headers:{apikey:SB_KEY,"Content-Type":"application/json"},body:JSON.stringify(args),signal:ac?ac.signal:undefined});
+    if(!r.ok) throw new Error("nube "+r.status);
+    return await r.json();
+  } finally { if(t) clearTimeout(t); }
 }
 
 /* ---------- bóveda ---------- */
@@ -139,7 +144,7 @@ async function pushCloud(){
   setSync("busy","☁ subiendo…");
   try{
     const blob=JSON.parse(txt);
-    await rpc("clases_vault_put",{p_vault:CLOUD_VAULT,p_blob:blob,p_secret:Vault.secret});
+    await rpc("clases_vault_put",{p_vault:CLOUD_VAULT,p_blob:blob,p_secret:Vault.secret},20000);
     lsDel(VK.PENDING); lsSet(VK.SYNCED,blob.savedAt||"");
     const d=new Date(); setSync("ok","☁ guardado "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"));
   }catch(e){
@@ -155,7 +160,9 @@ window.addEventListener("pagehide",()=>{ if(Vault.dirty) saveLocal(); });
 async function loadCandidates(){
   const out=[]; let cloudOk=false;
   const l=lsGet(VK.LOCAL); if(l){ try{ out.push({src:"local",blob:JSON.parse(l)}); }catch(e){} }
-  try{ const c=await rpc("clases_vault_get",{p_vault:CLOUD_VAULT}); if(c&&c.ct){ out.push({src:"cloud",blob:c}); cloudOk=true; } }catch(e){}
+  // con datos guardados aquí no se espera mucho a la nube (señal débil o sin señal en el estudio)
+  const tieneLocal=out.some(x=>x.src==="local"), sinRed=typeof navigator!=="undefined"&&navigator.onLine===false;
+  if(!(tieneLocal&&sinRed)){ try{ const c=await rpc("clases_vault_get",{p_vault:CLOUD_VAULT},tieneLocal?4000:15000); if(c&&c.ct){ out.push({src:"cloud",blob:c}); cloudOk=true; } }catch(e){} }
   const o=lsGet(VK.OLD_LOCAL); if(o){ try{ out.push({src:"old",blob:JSON.parse(o)}); }catch(e){} }
   return {out,cloudOk};
 }

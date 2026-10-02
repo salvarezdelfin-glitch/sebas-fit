@@ -1364,6 +1364,7 @@ function launchInstructor(){
       bpm:pl?Math.round((pl.bpmMin+pl.bpmMax)/2):112};
   }
   renderOverlay();
+  try{ if(navigator.wakeLock) navigator.wakeLock.request("screen").then(l=>{ if(state.iv) state.iv.wl=l; else l.release(); }).catch(()=>{}); }catch(e){}   // que no se apague la pantalla
 }
 function ivStep(){return state.iv.steps[state.iv.i];}
 function ivResolve(){return resolve(ivStep().slot);}
@@ -1600,7 +1601,7 @@ function ivGoto(delta){
 }
 function ivExit(){
   if(state.iv&&state.iv.metodo==="sculpt"){ stopMetro(); ivHoldStop(); } fClearTimer();
-  clearInterval(clockTimer);clockTimer=null; state.iv=null; renderOverlay();
+  clearInterval(clockTimer);clockTimer=null; try{ if(state.iv&&state.iv.wl) state.iv.wl.release(); }catch(e){} state.iv=null; renderOverlay();
 }
 function ivClockTick(){ const iv=state.iv; if(!iv)return; iv.elapsed++;
   const el=document.getElementById("iv-clock"); if(el)el.textContent=fmtClock(iv.elapsed); }
