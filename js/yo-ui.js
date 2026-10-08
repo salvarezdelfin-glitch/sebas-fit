@@ -26,8 +26,8 @@ function yoSiguiente(){
 }
 const yoMiniSemana=(sem)=>`<div class="card yo-mini">${yoDiasSemana(sem).map(d=>`<div class="yo-mini-r ${d.fecha===todayStr()?"hoy":""}"><b>${d.dia.slice(0,3)}</b><span>${d.ses.length?d.ses.map(x=>esc(x.titulo)).join(" + "):'<i>libre</i>'}${d.clases?` <small>🎤${d.clases}</small>`:""}</span></div>`).join("")}</div>`;
 function yoSesHtml(s,aj){
-  const dur=s.dur?`<span class="yo-dur">≈ ${s.dur}′</span>`:"";
-  return `<div class="yo-ses ${YO_DURO.includes(s.code)||s.code==="RACE"?"duro":""}"><div class="yo-ses-h"><b>${esc(s.titulo)}</b>${dur}</div>${aj&&aj.factor<1&&s.code!=="RACE"?`<div class="yo-ajuste">Hoy: ${aj.factor<=.5?"cambia o salta esta sesión":"recorta ~"+Math.round((1-aj.factor)*100)+" % (menos volumen, mismo ritmo cómodo)"}</div>`:""}<ul>${s.items.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`;
+  const dur=s.dur?`<span class="yo-dur">≈ ${s.dur}′</span>`:"", ed="ABCD".includes(s.code)?`<button class="yo-edit" data-action="yo-rut-edit" data-c="${s.code}">✎ Editar${s.propia?" · propia":""}</button>`:"";
+  return `<div class="yo-ses ${YO_DURO.includes(s.code)||s.code==="RACE"?"duro":""}"><div class="yo-ses-h"><b>${esc(s.titulo)}</b>${dur}${ed}</div>${aj&&aj.factor<1&&s.code!=="RACE"?`<div class="yo-ajuste">Hoy: ${aj.factor<=.5?"cambia o salta esta sesión":"recorta ~"+Math.round((1-aj.factor)*100)+" % (menos volumen, mismo ritmo cómodo)"}</div>`:""}<ul>${s.items.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`;
 }
 function yoChips(k,vals,cur){ return `<div class="yo-chips">${vals.map(v=>`<button class="yo-chip ${String(cur)===String(v)?"on":""}" data-action="yo-ck" data-k="${k}" data-v="${v}">${v}</button>`).join("")}</div>`; }
 function yoTabHoy(){
@@ -60,7 +60,7 @@ function yoTabSemana(){
     ${carga.avisos.length?`<div class="alert-list">${carga.avisos.map(x=>`<div class="alert warn">⚠ ${esc(x)}</div>`).join("")}</div>`:""}
     <div class="yo-semana">${dias.map(fila).join("")}</div>
     <div class="acts-row" style="margin:14px 0"><button class="btn" data-action="yo-copiar-sem">⧉ Copiar la semana</button><button class="btn ghost" data-action="yo-plan-regen">↻ Reacomodar según mis clases</button></div>
-    <p class="hint">Las sesiones duras (fondo, calidad, pierna pesada y peso muerto) se colocan donde das menos clases, nunca pegadas al fondo largo, y cada semana dejas un día libre. Si cambias tu horario en Ajustes, toca "Reacomodar".</p>`;
+    <p class="hint">Las sesiones duras (fondo, calidad, pierna pesada y jalón con peso muerto) se colocan donde das menos clases, nunca pegadas al fondo largo, y cada semana dejas un día libre. Si cambias tu horario en Ajustes, toca "Reacomodar".</p>`;
 }
 
 /* ---------- MARATÓN ---------- */
@@ -100,7 +100,7 @@ function yoTabFuerza(){
   const ult=yoPesas().slice(-8).reverse();
   return `<div class="alert ok" style="margin-bottom:14px">Meta: ${["sentadilla","banca","muerto"].map(l=>YO_LIFTS[l]+" "+(m[l]||"—")).join(" · ")} kg. Subes de a 2.5 kg sólo cuando la serie sale limpia con 2 repeticiones en el tanque; en semanas de mucho kilometraje mantienes el peso y recortas series, no kilos.</div>
     ${rutHtml}<div class="yo-lifts">${lifts.map(card).join("")}</div>
-    <section class="blk"><div class="blk-head"><h2>Reglas para no lesionarte</h2></div><div class="card"><ul class="yo-ul"><li>Calienta con 3–4 series progresivas; la primera serie de trabajo nunca es la primera vez que cargas el peso.</li><li>Nunca saltes más de 5 kg sobre lo último que hiciste (la app ya lo respeta).</li><li>Sentadilla y peso muerto fuertes: no el día antes del fondo largo ni de la calidad.</li><li>Una semana de cada cuatro es de descarga (−35 % de carga); coincide con la de menos kilómetros.</li><li>Los últimos 10 días antes del maratón no hay pierna pesada.</li><li>Técnica antes que kilos: si baja la técnica, baja el peso.</li></ul></div></section>
+    <section class="blk"><div class="blk-head"><h2>Reglas para no lesionarte</h2></div><div class="card"><ul class="yo-ul"><li>Calienta con 3–4 series progresivas; la primera serie de trabajo nunca es la primera vez que cargas el peso.</li><li>Nunca saltes más de 5 kg sobre lo último que hiciste (la app ya lo respeta).</li><li>Pierna pesada y jalón con peso muerto: no el día antes del fondo largo ni de la calidad.</li><li>Una semana de cada cuatro es de descarga (−35 % de carga); coincide con la de menos kilómetros.</li><li>Los últimos 10 días antes del maratón no hay pierna pesada.</li><li>Técnica antes que kilos: si baja la técnica, baja el peso.</li></ul></div></section>
     <section class="blk"><div class="blk-head"><h2>Últimas series</h2></div><div class="card">${ult.length?ult.map(p=>`<div class="yo-reg"><span><b>${YO_LIFTS[p.lift]}</b> ${p.kg} kg × ${p.reps}${p.series>1?" × "+p.series:""}${p.rpe?" · RPE "+p.rpe:""}</span><small>${fmtCorto(p.fecha)} · 1RM ≈ ${r1(ptE1rm(+p.kg,+p.reps))}</small><button class="x" data-action="yo-del" data-k="pesas" data-id="${p.id}" aria-label="Borrar">✕</button></div>`).join(""):`<p class="hint" style="margin:0">Aún no has registrado series.</p>`}</div></section>`;
 }
 
@@ -158,6 +158,8 @@ function yoModal(md){
   if(md.type==="yo-peso") return modalShell("Peso y % de grasa",`<div class="form-grid g3">${f("yp-fecha","Fecha",todayStr(),"date")}${f("yp-peso","Peso (kg)","")}${f("yp-grasa","% de grasa","")}</div>`,`<button class="btn ghost" data-action="close-modal">Cancelar</button><button class="btn primary" data-action="yo-save-peso">Guardar</button>`);
   if(md.type==="yo-carrera") return modalShell("Registrar carrera",`<div class="form-grid g3">${f("yc-fecha","Fecha",todayStr(),"date")}${f("yc-km","Kilómetros","")}${f("yc-min","Minutos","")}<div><label class="mini">Tipo</label>${ptSel("yc-tipo",["fácil","calidad","largo","carrera"].map(x=>[x,x]),"fácil")}</div>${f("yc-rpe","Esfuerzo (1–10)","")}${f("yc-dolor","Dolor (0–10)",0)}</div>`,`<button class="btn ghost" data-action="close-modal">Cancelar</button><button class="btn primary" data-action="yo-save-carrera">Guardar</button>`);
   if(md.type==="yo-pesa") return modalShell("Registrar serie",`<div class="form-grid g3"><div><label class="mini">Levantamiento</label>${ptSel("ys-lift",Object.keys(YO_LIFTS).map(k=>[k,YO_LIFTS[k]]),md.lift||"sentadilla")}</div>${f("ys-fecha","Fecha",todayStr(),"date")}${f("ys-kg","Peso (kg)","")}${f("ys-reps","Repeticiones","")}${f("ys-series","Series",1)}${f("ys-rpe","RPE (6–10)","")}</div>`,`<button class="btn ghost" data-action="close-modal">Cancelar</button><button class="btn primary" data-action="yo-save-pesa">Guardar</button>`);
+  if(md.type==="yo-rut"){ const code=md.code, cu=yoCustom(code), sem=yoSemanaHoy()||yoSemanas()[0], lines=cu&&cu.lines&&cu.lines.length?cu.lines:yoRutinaBase(code,sem);
+    return modalShell("Editar rutina",`<div class="form-grid"><div class="full"><label class="mini">Nombre</label><input class="inp" id="yr-titulo" value="${esc((cu&&cu.titulo)||YO_TITULO[code])}"></div><div class="full"><label class="mini">Ejercicios (uno por línea)</label><textarea class="inp" id="yr-lineas" rows="11" style="font-family:var(--f-mono);font-size:13px">${esc(lines.join(String.fromCharCode(10)))}</textarea></div></div><p class="hint">Cambia, quita o agrega lo que quieras: series, repeticiones, ejercicios. Una línea que sea <b>@sentadilla</b>, <b>@banca</b>, <b>@muerto</b> o <b>@militar</b> pone la serie principal con tus kilos calculados.</p>`,`<button class="btn ghost" data-action="yo-rut-reset">Restablecer</button><button class="btn ghost" data-action="close-modal">Cancelar</button><button class="btn primary" data-action="yo-rut-save">Guardar</button>`); }
   return "";
 }
 
@@ -182,6 +184,10 @@ function yoClick(a,t){
   if(a==="yo-save-pesa"){ const kg=nv("ys-kg"), reps=nv("ys-reps"); if(!kg||!reps){ toast("Escribe peso y repeticiones"); return true; }
     y.pesas.push({id:newId("yl"),fecha:fv("ys-fecha")||todayStr(),lift:fv("ys-lift"),kg,reps,series:nv("ys-series")||1,rpe:nv("ys-rpe")||null}); touch(); closeModal(); render(); toast("Serie guardada"); return true; }
   if(a==="yo-del"){ const arr=y[t.dataset.k], i=arr.findIndex(x=>x.id===t.dataset.id); if(i<0) return true; const [x]=arr.splice(i,1); touch(); render(); toastUndo("Registro borrado",()=>{ arr.splice(Math.min(i,arr.length),0,x); touch(); render(); }); return true; }
+  if(a==="yo-rut-edit"){ state.modal={type:"yo-rut",code:t.dataset.c}; renderOverlay(); return true; }
+  if(a==="yo-rut-save"){ const code=state.modal.code, lines=(document.getElementById("yr-lineas").value||"").split(String.fromCharCode(10)).map(x=>x.trim()).filter(Boolean); if(!lines.length){ toast("Escribe al menos un ejercicio"); return true; }
+    const rut=Object.assign({},y.config.rutinas||{}); rut[code]={titulo:fv("yr-titulo").trim()||YO_TITULO[code],lines}; y.config=Object.assign({},y.config,{rutinas:rut}); touch(); closeModal(); render(); toast("Rutina guardada"); return true; }
+  if(a==="yo-rut-reset"){ const code=state.modal.code, rut=Object.assign({},y.config.rutinas||{}); delete rut[code]; y.config=Object.assign({},y.config,{rutinas:rut}); touch(); closeModal(); render(); toast("Rutina restablecida"); return true; }
   if(a==="yo-plan-regen"){ yoGuardarPlan(); render(); toast("Plan reacomodado"); return true; }
   if(a==="yo-perfil-save"){
     const pf=Object.assign({},y.perfil,{sexo:fv("yo-sexo"),edad:nv("yo-edad"),estatura:nv("yo-est"),peso:nv("yo-peso"),grasa:nv("yo-grasa"),nivel:fv("yo-nivel"),kmSemana:nv("yo-km")||25,largo:nv("yo-largo")||12});

@@ -402,3 +402,4 @@ button,input,select,textarea,a{touch-action:manipulation}
 .yo-base{margin-bottom:6px} .alert.bad{border-left-color:#d65454;background:rgba(214,84,84,.09)}
 @media (max-width:720px){ .yo-lifts,.yo-menu{grid-template-columns:1fr} .yo-ritmos{grid-template-columns:repeat(3,1fr)} .yo-dia{grid-template-columns:1fr} .yo-dia-n{flex-direction:row;align-items:baseline;gap:8px} }
 .yo-mini{padding:6px 14px!important} .yo-mini-r{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--hairline-soft);font-size:13.5px} .yo-mini-r:last-child{border:0} .yo-mini-r b{min-width:34px;color:var(--muted)} .yo-mini-r.hoy b{color:var(--accent)} .yo-mini-r i{color:var(--muted)}
+.yo-edit{margin-left:auto;background:none;border:1px solid var(--hairline);border-radius:8px;padding:3px 10px;font-size:12px;color:var(--muted)} .yo-edit:hover{color:var(--accent);border-color:var(--accent)}

@@ -78,3 +78,18 @@ window.yoTest=async function(){
   const copia=JSON.parse(JSON.stringify(Vault.data)); const merged=mergeData(copia,copia); ok(merged.yo&&merged.yo.pesos.length===YO_D().pesos.length&&merged.yo.plan&&merged.yo.plan.layout,'el merge conserva Yo');
   YOUI.tab='hoy'; render(); return {fallas:F,info,errs:__errs};
 };
+/* rutinas editables y división empuje / jalón / pierna */
+window.yoRutTest=async function(){
+  await yoTest(); const F=[]; const ok=(c,m)=>{ if(!c) F.push(m); }; const $=s=>document.querySelector(s);
+  const sem=yoSemanas()[0];
+  ok(yoDescLift('A',sem).titulo==='Pierna pesada'&&yoDescLift('B',sem).titulo==='Empuje pesado'&&/Jalón pesado/.test(yoDescLift('C',sem).titulo),'división pierna / empuje / jalón');
+  ok(yoDescLift('C',sem).items.some(x=>/Dominadas con lastre/.test(x))&&yoDescLift('C',sem).items.some(x=>/Peso muerto:/.test(x)),'jalón: peso muerto + dominadas');
+  ok(yoDescLift('B',sem).items.some(x=>/Press de banca:/.test(x)&&/kg/.test(x)),'empuje: banca con kilos');
+  YOUI.tab='fuerza'; state.screen='yo'; render(); ok(!!$('[data-action="yo-rut-edit"][data-c="B"]'),'botón editar en Fuerza');
+  $('[data-action="yo-rut-edit"][data-c="B"]').click(); const ta=document.getElementById('yr-lineas'); ok(!!ta&&/@banca/.test(ta.value),'el editor muestra @banca');
+  document.getElementById('yr-titulo').value='Empuje mío'; ta.value='Calienta 5 min\n@banca\nPress inclinado 4 × 6\nFondos 3 × 10'; $('[data-action="yo-rut-save"]').click();
+  const d=yoDescLift('B',sem); ok(d.titulo==='Empuje mío'&&d.propia&&d.items.length===5&&/Press inclinado 4 × 6/.test(d.items.join('|'))&&/Series de aproximación/.test(d.items.join('|')),'guarda la rutina propia ('+d.items.length+' líneas)');
+  ok(/Empuje mío/.test($('#app').textContent)&&/propia/.test($('#app').textContent),'se ve la rutina propia');
+  $('[data-action="yo-rut-edit"][data-c="B"]').click(); $('[data-action="yo-rut-reset"]').click(); ok(!yoDescLift('B',sem).propia&&yoDescLift('B',sem).titulo==='Empuje pesado','restablecer vuelve a la original');
+  const sm=JSON.stringify(Vault.data.yo.config); ok(!/undefined|NaN/.test(document.querySelector('#app').textContent),'sin undefined'); return {fallas:F,errs:__errs};
+};

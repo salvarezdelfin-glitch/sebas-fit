@@ -35,7 +35,7 @@ function yoRitmos(){ const mp=yoMP(); return {mp,facil:[mp+60,mp+90],largo:[mp+4
 const yoRango=(r)=>yoMmss(r[0])+"–"+yoMmss(r[1]);
 
 /* ---------- semana tipo: dónde cae cada sesión según tus clases ---------- */
-const YO_SES={LR:{n:"Fondo largo",c:3.5},Q:{n:"Calidad",c:3},E:{n:"Rodaje fácil",c:1.4},A:{n:"Pierna pesada",c:3},B:{n:"Empuje + tirón pesado",c:2},C:{n:"Peso muerto",c:3},D:{n:"Torso volumen + core",c:1.6}};
+const YO_SES={LR:{n:"Fondo largo",c:3.5},Q:{n:"Calidad",c:3},E:{n:"Rodaje fácil",c:1.4},A:{n:"Pierna pesada",c:3},B:{n:"Empuje pesado",c:2},C:{n:"Jalón pesado",c:3},D:{n:"Empuje + jalón volumen",c:1.6}};
 const YO_DURO=["LR","Q","A","C"];
 function yoClasesPorDia(){ const c=[0,0,0,0,0,0,0]; CL_D().schedule.forEach(s=>{ const i=YO_DIAS.indexOf(s.day); if(i>=0) c[i]++; }); return c; }
 function yoRng(seed){ return ()=>{ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -163,24 +163,28 @@ function yoKgPara(lift,pct){
   return kg;
 }
 const YO_ACC={
-  A:["Peso muerto rumano 3 × 6 (peso moderado, bisagra limpia)","Zancada búlgara 3 × 8 por pierna (RPE 7)","Hip thrust 3 × 8","Core pesado (rueda o Pallof) 3 × 10","Pantorrilla de pie 3 × 12 (protege tendón de Aquiles)"],
-  B:["Remo con barra 4 × 6","Press militar 3 × 5","Dominadas (con lastre si puedes) 3 × 6–8","Face pull 3 × 15","Tríceps + curl 2 × 10"],
-  C:["Sentadilla frontal o con pausa 3 × 5 (65 % de tu sentadilla)","Hip thrust 3 × 6","Dominadas 3 × (repeticiones − 2)","Cargada de maleta (farmer) 3 × 30 m"],
-  D:["Press inclinado con mancuernas 3 × 8–10","Remo unilateral 3 × 10","Press de hombro con mancuernas 3 × 8","Elevaciones laterales 3 × 15","Curl + tríceps 3 × 12","Core: plancha y paseo de granjero 3 × 30–40″"]
+  A:["Prensa o zancada búlgara 3 × 8 por pierna (RPE 7)","Curl femoral 3 × 10","Hip thrust 3 × 8","Pantorrilla de pie 3 × 12 (protege el tendón de Aquiles)","Core pesado (rueda o Pallof) 3 × 10"],
+  B:["Press militar 3 × 5","Press inclinado con mancuernas 3 × 8","Fondos o press cerrado 3 × 8","Elevaciones laterales 3 × 15","Tríceps en polea 3 × 10–12"],
+  C:["Dominadas con lastre 4 × 5 (o jalón al pecho pesado)","Remo con barra 4 × 6","Jalón neutro 3 × 10","Face pull 3 × 15","Curl de bíceps 3 × 10"],
+  D:["Press inclinado con mancuernas 3 × 10","Jalón al pecho 3 × 10","Remo unilateral 3 × 10","Elevaciones laterales 3 × 15","Curl + tríceps en superserie 3 × 12","Core: plancha y paseo de granjero 3 × 30–40″"]
 };
+const YO_TITULO={A:"Pierna pesada",B:"Empuje pesado",C:"Jalón pesado (peso muerto + dominadas)",D:"Empuje + jalón · volumen"};
+const YO_MAIN={A:"sentadilla",B:"banca",C:"muerto"};
+const yoCustom=code=>((YO_D().config||{}).rutinas||{})[code]||null;
+/* líneas editables de una rutina; "@sentadilla" etc. se reemplaza por la serie principal con tus kilos calculados */
+function yoRutinaBase(code,sem){
+  const acc=(YO_ACC[code]||[]).slice(0,sem&&(sem.fase==="pico"||sem.fase==="afinacion")?3:undefined).map(x=>x+" · descanso 60–90″");
+  return ["Calentamiento (8′): 5′ de bici o remo suave + movilidad de cadera, tobillo y hombro",...(YO_MAIN[code]?["@"+YO_MAIN[code]]:[]),...acc,"Enfriamiento: 5′ caminando + estirar lo trabajado"];
+}
 function yoDescLift(code,sem){
-  const f=yoFzaSem(sem), pesadoAbajo=sem.km>=Math.round(yoPlan().pico*0.85);
-  const MAIN={A:["sentadilla","pierna"],B:["banca",""],C:["muerto","pierna"]}[code];
-  const desc=l=>l==="banca"?"2–3′":"3–4′";
-  const set=(lift,k)=>{ const kg=yoKgPara(lift,f.pct); let s=f.sets; if(k==="pierna"&&pesadoAbajo) s=Math.max(2,s-1); if(lift==="muerto") s=Math.min(3,s);
+  const f=yoFzaSem(sem), pesadoAbajo=sem.km>=Math.round(yoPlan().pico*0.85), cu=yoCustom(code);
+  const desc=l=>l==="banca"||l==="militar"?"2–3′":"3–4′";
+  const set=lift=>{ const kg=yoKgPara(lift,f.pct), pierna=lift==="sentadilla"||lift==="muerto"; let s=f.sets; if(pierna&&pesadoAbajo) s=Math.max(2,s-1); if(lift==="muerto") s=Math.min(3,s);
     return YO_LIFTS[lift]+": "+s+" series × "+f.reps+" repeticiones"+(kg?" con "+kg+" kg":" (pon tu peso de partida en Perfil)")+" · descanso "+desc(lift)+(f.deload?" · semana de descarga":" · RPE "+(f.pct>=.84?"8":"7")); };
   const aprox=lift=>{ const kg=yoKgPara(lift,f.pct); return kg?"Series de aproximación: "+[[.4,5],[.6,3],[.75,2]].map(([p,r])=>yoRound(kg*p,2.5)+" kg × "+r).join(" → ")+" (sin llegar al fallo, 1–2′ entre ellas)":"Series de aproximación: sube de a poco hasta tu peso de trabajo"; };
-  const acc=(YO_ACC[code]||[]).slice(0,sem.fase==="pico"||sem.fase==="afinacion"?3:undefined).map(x=>x+" · descanso 60–90″");
-  const cal="Calentamiento (8′): 5′ de bici o remo suave + movilidad de cadera, tobillo y hombro";
-  const fin="Enfriamiento: 5′ caminando + estirar lo trabajado";
-  const head=MAIN?[cal,aprox(MAIN[0]),set(MAIN[0],MAIN[1])]:[cal];
-  const titulo={A:"Pierna pesada",B:"Empuje + tirón pesado",C:"Peso muerto",D:"Torso volumen + core"}[code];
-  return {titulo,items:[...head,...acc,fin],dur:{A:65,B:60,C:60,D:50}[code]};
+  const lineas=(cu&&cu.lines&&cu.lines.length?cu.lines:yoRutinaBase(code,sem)), items=[];
+  lineas.forEach(l=>{ const m=l.match(/^@([a-z]+)/); if(m&&YO_LIFTS[m[1]]){ items.push(aprox(m[1]),set(m[1])); } else items.push(l); });
+  return {code,titulo:(cu&&cu.titulo)||YO_TITULO[code],items,dur:{A:65,B:60,C:65,D:50}[code],propia:!!cu};
 }
 
 /* ---------- el día y la semana ---------- */
