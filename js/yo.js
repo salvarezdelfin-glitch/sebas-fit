@@ -170,13 +170,17 @@ const YO_ACC={
 };
 function yoDescLift(code,sem){
   const f=yoFzaSem(sem), pesadoAbajo=sem.km>=Math.round(yoPlan().pico*0.85);
+  const MAIN={A:["sentadilla","pierna"],B:["banca",""],C:["muerto","pierna"]}[code];
+  const desc=l=>l==="banca"?"2–3′":"3–4′";
   const set=(lift,k)=>{ const kg=yoKgPara(lift,f.pct); let s=f.sets; if(k==="pierna"&&pesadoAbajo) s=Math.max(2,s-1); if(lift==="muerto") s=Math.min(3,s);
-    return YO_LIFTS[lift]+" "+s+" × "+f.reps+(kg?" @ "+kg+" kg":" (pon tu peso de partida en Perfil)")+(f.deload?" · descarga":" · RPE "+(f.pct>=.84?"8":"7")); };
-  const acc=(YO_ACC[code]||[]).slice(0,sem.fase==="pico"||sem.fase==="afinacion"?3:undefined);
-  if(code==="A") return {titulo:"Pierna pesada",items:[set("sentadilla","pierna"),...acc],dur:65};
-  if(code==="B") return {titulo:"Empuje + tirón pesado",items:[set("banca"),...acc],dur:60};
-  if(code==="C") return {titulo:"Peso muerto",items:[set("muerto","pierna"),...acc],dur:60};
-  return {titulo:"Torso volumen + core",items:acc,dur:50};
+    return YO_LIFTS[lift]+": "+s+" series × "+f.reps+" repeticiones"+(kg?" con "+kg+" kg":" (pon tu peso de partida en Perfil)")+" · descanso "+desc(lift)+(f.deload?" · semana de descarga":" · RPE "+(f.pct>=.84?"8":"7")); };
+  const aprox=lift=>{ const kg=yoKgPara(lift,f.pct); return kg?"Series de aproximación: "+[[.4,5],[.6,3],[.75,2]].map(([p,r])=>yoRound(kg*p,2.5)+" kg × "+r).join(" → ")+" (sin llegar al fallo, 1–2′ entre ellas)":"Series de aproximación: sube de a poco hasta tu peso de trabajo"; };
+  const acc=(YO_ACC[code]||[]).slice(0,sem.fase==="pico"||sem.fase==="afinacion"?3:undefined).map(x=>x+" · descanso 60–90″");
+  const cal="Calentamiento (8′): 5′ de bici o remo suave + movilidad de cadera, tobillo y hombro";
+  const fin="Enfriamiento: 5′ caminando + estirar lo trabajado";
+  const head=MAIN?[cal,aprox(MAIN[0]),set(MAIN[0],MAIN[1])]:[cal];
+  const titulo={A:"Pierna pesada",B:"Empuje + tirón pesado",C:"Peso muerto",D:"Torso volumen + core"}[code];
+  return {titulo,items:[...head,...acc,fin],dur:{A:65,B:60,C:60,D:50}[code]};
 }
 
 /* ---------- el día y la semana ---------- */

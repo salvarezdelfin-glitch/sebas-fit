@@ -1,4 +1,4 @@
-const CACHE = "sebasfit-v6";
+const CACHE = "sebasfit-v7";
 const SHELL = ["./","./index.html","./manifest.webmanifest","./css/fonts.css","./css/lock.css","./css/sculpt.css","./css/modulos.css",
   "./js/fflate.js","./js/core.js","./js/sculpt.js","./js/estacion.js","./js/armar.js","./js/aprender.js","./js/musica.js","./js/clases.js","./js/ptlib.js","./js/pt.js","./js/pt2.js","./js/proyeccion.js","./js/yo.js","./js/yo-ui.js","./js/cot.js","./js/main.js",
   "./icon-192.png","./icon-512.png","./apple-touch-icon.png","./favicon.png",
