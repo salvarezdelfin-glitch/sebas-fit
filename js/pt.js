@@ -7,7 +7,7 @@
    ============================================================ */
 const PT_D=()=>Vault.data.pt;
 const PTUI={cid:null,tab:"resumen",filtro:"activos",sem:null,ses:null,graf:null,genSel:null,addPat:"sentadilla"};
-const PT_TABS=[["resumen","Resumen"],["programa","Programa"],["sesion","Sesión"],["progreso","Progreso"],["pagos","Pagos"]];
+const PT_TABS=[["resumen","Resumen"],["programa","Programa"],["proceso","Proceso"],["sesion","Sesión"],["progreso","Progreso"],["pagos","Pagos"]];
 const PT_ZONAS=[["rodilla","Rodilla"],["hombro","Hombro"],["espalda","Espalda baja"],["muneca","Muñeca"]];
 const PT_SCHED={2:"Lun · Jue",3:"Lun · Mié · Vie",4:"Lun · Mar · Jue · Vie",5:"Lun · Mar · Mié · Vie · Sáb",6:"Lun a Sáb"};
 const PT_MODALIDAD={presencial:"Presencial",remoto:"Rutina mandada"};
@@ -58,6 +58,7 @@ function ptScore(e,rol,nivelN,obj){
   let s=Math.random()*1.5;
   if(rol==="main"||rol==="acc") s+=(e.t==="c"?2:0); else s+=(e.t==="a"?1:0);
   s+=(e.n===nivelN?2:(e.n===nivelN-1?1:0));
+  if(typeof aprPTBoost==="function") s+=aprPTBoost(e.id);   // prefiere lo que cambias a favor, evita lo que quitas
   if(obj==="fuerza"&&rol==="main"&&(e.need.includes("barra")||e.need.includes("maq"))) s+=1;
   if(obj==="gluteo"&&e.m==="gluteo") s+=1;
   return s;
@@ -268,6 +269,7 @@ function svgBars(vals,labels,fmt,color){
 
 /* ---------- vistas ---------- */
 function viewClientes(){
+  if(PTUI.vista==="plantillas") return viewPlantillas();
   const L=PT_D().clientes, f=PTUI.filtro;
   const vis=L.filter(c=>f==="todos"||(f==="activos"?c.estado==="activo":f==="pausa"?c.estado==="pausa":c.estado==="archivado")).sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const cnt=k=>L.filter(c=>c.estado===k).length;
@@ -280,6 +282,7 @@ function viewClientes(){
   }).join("");
   return `<div class="wrap">
     <header class="page-head"><span class="eyebrow">Personal trainer</span><h1>Clientes</h1><p class="sub">Programas por nivel, seguimiento de sesiones y progreso — presencial y rutina mandada.</p></header>
+    ${ptVistaTabs()}
     <div class="toolbar"><div class="seg">${[["activos","Activos ("+cnt("activo")+")"],["pausa","En pausa ("+cnt("pausa")+")"],["archivado","Archivados ("+cnt("archivado")+")"],["todos","Todos"]].map(([k,l])=>`<button data-action="pt-filtro" data-v="${k}" class="${f===k?"on":""}">${l}</button>`).join("")}</div>
       <span class="spacer"></span><button class="btn primary" data-action="pt-nuevo">+ Nuevo cliente</button></div>
     ${cards?`<div class="cli-grid">${cards}</div>`:`<div class="empty"><b>Aún no hay clientes${f!=="todos"?" en esta vista":""}.</b><p>Crea el primero con "Nuevo cliente" — o desde una cotización aceptada.</p></div>`}
@@ -288,7 +291,7 @@ function viewClientes(){
 function viewCliente(){
   const c=ptCliente(PTUI.cid); if(!c){ PTUI.cid=null; return viewClientes(); }
   const tabs=PT_TABS.map(([k,l])=>`<button data-action="pt-tab" data-v="${k}" class="${PTUI.tab===k?"on":""}">${l}</button>`).join("");
-  const body=PTUI.tab==="programa"?ptTabPrograma(c):PTUI.tab==="sesion"?ptTabSesion(c):PTUI.tab==="progreso"?ptTabProgreso(c):PTUI.tab==="pagos"?ptTabPagos(c):ptTabResumen(c);
+  const body=PTUI.tab==="programa"?ptTabPrograma(c):PTUI.tab==="proceso"?ptTabProceso(c):PTUI.tab==="sesion"?ptTabSesion(c):PTUI.tab==="progreso"?ptTabProgreso(c):PTUI.tab==="pagos"?ptTabPagos(c):ptTabResumen(c);
   return `<div class="wrap">
     <div class="back-row"><button class="btn sm ghost" data-action="pt-back">← Clientes</button></div>
     <header class="page-head cli-head"><div><span class="eyebrow">${PT_MODALIDAD[c.modalidad]} · ${esc(PT_EQUIPO[c.equipo].nom)}</span><h1>${esc(c.nombre)}</h1>
@@ -318,23 +321,26 @@ function ptTabPrograma(c){
   const prog=ptProgActivo(c.id);
   if(!prog) return `<div class="empty"><b>${esc(c.nombre)} no tiene programa activo.</b><p>Genera uno según su nivel (${PT_NIVELES[c.nivel].nom}), objetivo, días y material${(c.lesiones||[]).length?", evitando: "+c.lesiones.join(", "):""}.</p>
     <p><button class="btn primary" data-action="pt-gen" data-id="${c.id}">Generar programa</button></p></div>`;
+  return ptProgramaBody(prog,c);
+}
+function ptProgramaBody(prog,c){
   if(!PTUI.sem||PTUI.sem>prog.semanas) PTUI.sem=ptSemanaDe(prog,todayStr());
   const w=PTUI.sem, f=ptFase(prog,w), vol=ptVolumen(prog,w);
   const volH=PT_MUSCULOS.map(m=>{ const st=ptVolEstado(m,vol[m],prog); return `<div class="vol ${st}" title="${PT_MUSC_NOM[m]}: ${vol[m]} series/sem"><span>${PT_MUSC_NOM[m]}</span><b class="num">${vol[m]}</b></div>`; }).join("");
   const dias=prog.dias.map((d,di)=>`<section class="sec pt-day"><div class="sec-head"><h3>${esc(d.nombre)}</h3><span class="s-meta">${d.ejercicios.length} ejercicios · ≈ ${ptMinDia(d)} min</span><span class="spacer"></span>
-      <button class="btn sm" data-action="pt-add-ex" data-d="${d.id}">+ Añadir</button><button class="btn sm primary" data-action="pt-ir-sesion" data-d="${d.id}">▶ Registrar</button></div>
+      <button class="btn sm" data-action="pt-add-ex" data-p="${prog.id}" data-d="${d.id}">+ Añadir</button>${c?`<button class="btn sm primary" data-action="pt-ir-sesion" data-p="${prog.id}" data-d="${d.id}">▶ Registrar</button>`:""}</div>
       ${d.ejercicios.map((sl,i)=>{ const e=PT_BY_ID[sl.ex]; if(!e) return ""; const rx=ptRx(prog,sl,w);
         return `<div class="ex pt-ex"><div class="ord"><div class="idx">${String(i+1).padStart(2,"0")}</div>
-          <button data-action="pt-move" data-d="${d.id}" data-u="${sl.uid}" data-dir="-1" ${i===0?"disabled":""} aria-label="Subir">▲</button><button data-action="pt-move" data-d="${d.id}" data-u="${sl.uid}" data-dir="1" ${i===d.ejercicios.length-1?"disabled":""} aria-label="Bajar">▼</button></div>
+          <button data-action="pt-move" data-p="${prog.id}" data-d="${d.id}" data-u="${sl.uid}" data-dir="-1" ${i===0?"disabled":""} aria-label="Subir">▲</button><button data-action="pt-move" data-p="${prog.id}" data-d="${d.id}" data-u="${sl.uid}" data-dir="1" ${i===d.ejercicios.length-1?"disabled":""} aria-label="Bajar">▼</button></div>
           <div class="body"><div class="name">${esc(e.nom)}</div>
             <div class="badges"><span class="chip">${esc(PT_PATRONES[e.p])}</span><span class="chip">${PT_MUSC_NOM[e.m]}</span><span class="chip">${e.need.map(t=>({pc:"peso corporal",man:"mancuernas",barra:"barra",maq:"máquina",pol:"polea",banco:"banco",kb:"kettlebell",liga:"liga",cubo:"cajón",dom:"barra fija",polainas:"polainas",pelota:"pelota"})[t]).join(" + ")}</span>${sl.rol==="main"?`<span class="chip solid">Básico</span>`:""}</div>
             <div class="scheme"><span class="n">${esc(ptRxTxt(rx,e.uni))}</span></div>
             <div class="cue">${esc(e.cue)}</div>${sl.nota?`<div class="cue" style="color:var(--accent)">✎ ${esc(sl.nota)}</div>`:""}</div>
-          <div class="acts"><button class="btn sm" data-action="pt-swap" data-d="${d.id}" data-u="${sl.uid}">↺ Cambiar</button><button class="btn sm ghost" data-action="pt-del-ex" data-d="${d.id}" data-u="${sl.uid}">✕</button></div></div>`; }).join("")}
+          <div class="acts"><button class="btn sm" data-action="pt-swap" data-p="${prog.id}" data-d="${d.id}" data-u="${sl.uid}">↺ Cambiar</button><button class="btn sm ghost" data-action="pt-del-ex" data-p="${prog.id}" data-d="${d.id}" data-u="${sl.uid}">✕</button></div></div>`; }).join("")}
     </section>`).join("");
   return `<div class="prog-head"><div><h2 class="prog-name">${esc(prog.nombre)}</h2><p class="hint">${prog.diasSem} días/sem (${PT_SCHED[prog.diasSem]||""}) · ${prog.semanas} semanas · ≈ ${prog.minutos} min por sesión · desde ${fmtCorto(prog.inicio)}</p></div>
     <div class="acts"><button class="btn sm" data-action="pt-copiar-prog" data-id="${prog.id}">⧉ Copiar para WhatsApp</button><button class="btn sm" data-action="pt-print-prog" data-id="${prog.id}">⎙ Imprimir / PDF</button>
-    <button class="btn sm" data-action="pt-gen" data-id="${c.id}">↻ Nuevo programa</button></div></div>
+    ${c?`<button class="btn sm" data-action="pt-gen" data-id="${c.id}">↻ Nuevo programa</button>`:""}</div></div>
     <div class="phase-card ph-${f.k}"><div class="pager"><button class="pg" data-action="pt-sem" data-d="-1" ${w<=1?"disabled":""} aria-label="Semana anterior">←</button><b>Semana ${w} de ${prog.semanas}</b><button class="pg" data-action="pt-sem" data-d="1" ${w>=prog.semanas?"disabled":""} aria-label="Semana siguiente">→</button></div>
       <div class="ph-body"><span class="chip ph">${esc(f.nom)}</span><span class="hint">${esc(f.desc)}</span></div></div>
     <div class="vol-row"><span class="mini-lbl">Series directas por semana</span><div class="vols">${volH}</div><p class="hint">Verde: dentro del rango recomendado para su nivel · ámbar: bajo o alto. Los básicos también trabajan músculos secundarios.</p></div>
@@ -440,6 +446,7 @@ function ptModal(md){
       <div><label class="mini">Dónde entrena</label>${ptSel("pc-equipo",eq,c.equipo)}</div>
       <div><label class="mini">Días por semana</label>${ptSel("pc-dias",[2,3,4,5,6].map(n=>[n,n+" días"]),c.dias)}</div>
       <div><label class="mini">Inicio</label><input class="inp" type="date" id="pc-inicio" value="${c.inicio||todayStr()}"></div>
+      ${ptFichaCampos(c)}
       <div class="full"><label class="mini">Lesiones o molestias (el generador evita esos ejercicios)</label><div class="chk-row">${PT_ZONAS.map(([k,l])=>`<label class="fb-check"><input type="checkbox" id="pc-z-${k}" ${(c.lesiones||[]).includes(k)?"checked":""}>${l}</label>`).join("")}</div></div>
       ${md.id?`<div class="full"><label class="mini">Estado</label>${ptSel("pc-estado",[["activo","Activo"],["pausa","En pausa"],["archivado","Archivado"]],c.estado)}</div>`:""}
       <div class="full"><label class="mini">Notas (historial, metas, horarios)</label><textarea class="inp" id="pc-notas" rows="3">${esc(c.notas||"")}</textarea></div></div>`,
@@ -496,7 +503,7 @@ function ptModal(md){
 
 /* ---------- acciones ---------- */
 function ptOpen(id){ PTUI.cid=id; PTUI.tab="resumen"; PTUI.sem=null; PTUI.ses=null; state.screen="cliente"; render(); window.scrollTo(0,0); }
-function ptClienteNuevo(){ return {nombre:"",tel:"",email:"",nivel:"basico",objetivo:"hipertrofia",modalidad:"presencial",equipo:"gym",dias:3,lesiones:[],notas:"",inicio:todayStr(),estado:"activo"}; }
+function ptClienteNuevo(){ return {nombre:"",tel:"",email:"",nivel:"basico",objetivo:"hipertrofia",modalidad:"presencial",equipo:"gym",dias:3,lesiones:[],notas:"",inicio:todayStr(),estado:"activo",sexo:"",estatura:"",peso0:"",grasa0:"",metaTexto:"",metaPeso:"",metaGrasa:""}; }
 function ptClienteDesdeForm(base){
   const c=Object.assign({},base);
   c.nombre=fv("pc-nombre").trim(); c.tel=fv("pc-tel").trim(); c.email=fv("pc-email").trim(); c.nivel=fv("pc-nivel"); c.objetivo=fv("pc-objetivo");
@@ -525,6 +532,7 @@ function ptGuardarSesion(){
   toast(prs.length?"🏆 Sesión guardada · récord en "+prs.map(id=>PT_BY_ID[id].nom).slice(0,2).join(", "):"Sesión guardada"+(pk?" · quedan "+(pk.sesiones-pk.usadas)+" del paquete":""));
 }
 function ptSwapEx(progId,diaId,uid,exId){
+  { const _p=PT_D().programas.find(p=>p.id===progId), _d=_p&&_p.dias.find(x=>x.id===diaId), _o=_d&&_d.ejercicios.find(s=>s.uid===uid); if(_o){ aprPT("evita",_o.ex); aprPT("afin",exId); } }
   const prog=PT_D().programas.find(p=>p.id===progId), d=prog.dias.find(x=>x.id===diaId), i=d.ejercicios.findIndex(s=>s.uid===uid), old=d.ejercicios[i], e=PT_BY_ID[exId];
   const tmp=ptSlot(e,old.rol,{nivel:prog.nivel,objetivo:prog.objetivo});
   d.ejercicios[i]=Object.assign(tmp,{uid:old.uid,nota:old.nota});   // conserva la posición; la prescripción se ajusta al ejercicio nuevo
@@ -532,6 +540,7 @@ function ptSwapEx(progId,diaId,uid,exId){
 }
 function ptClick(a,t,ev){
   const D=PT_D();
+  if(ptClick2(a,t)) return true;
   if(a==="pt-open"){ ptOpen(t.dataset.id); return true; }
   if(a==="pt-back"){ PTUI.cid=null; PTUI.ses=null; state.screen="clientes"; render(); return true; }
   if(a==="pt-filtro"){ PTUI.filtro=t.dataset.v; render(); return true; }
@@ -555,17 +564,17 @@ function ptClick(a,t,ev){
     D.programas.push(prog); touch(); PTUI.tab="programa"; PTUI.sem=1; closeModal(); render(); toast("Programa generado"); return true; }
   if(a==="pt-sem"){ PTUI.sem=Math.max(1,PTUI.sem+Number(t.dataset.d)); render(); return true; }
   if(a==="pt-move"){
-    const prog=ptProgActivo(PTUI.cid), d=prog.dias.find(x=>x.id===t.dataset.d), i=d.ejercicios.findIndex(s=>s.uid===t.dataset.u), j=i+Number(t.dataset.dir);
+    const prog=ptProgDe(t), d=prog.dias.find(x=>x.id===t.dataset.d), i=d.ejercicios.findIndex(s=>s.uid===t.dataset.u), j=i+Number(t.dataset.dir);
     if(j>=0&&j<d.ejercicios.length){ [d.ejercicios[i],d.ejercicios[j]]=[d.ejercicios[j],d.ejercicios[i]]; touch(); render(); } return true; }
   if(a==="pt-del-ex"){
-    const prog=ptProgActivo(PTUI.cid), d=prog.dias.find(x=>x.id===t.dataset.d), i=d.ejercicios.findIndex(s=>s.uid===t.dataset.u); if(i<0) return true;
-    const [sl]=d.ejercicios.splice(i,1); touch(); render(); toastUndo("Ejercicio quitado",()=>{ d.ejercicios.splice(Math.min(i,d.ejercicios.length),0,sl); touch(); render(); }); return true; }
-  if(a==="pt-swap"){ const prog=ptProgActivo(PTUI.cid); state.modal={type:"pt-swap",prog:prog.id,d:t.dataset.d,u:t.dataset.u}; renderOverlay(); return true; }
+    const prog=ptProgDe(t), d=prog.dias.find(x=>x.id===t.dataset.d), i=d.ejercicios.findIndex(s=>s.uid===t.dataset.u); if(i<0) return true;
+    const [sl]=d.ejercicios.splice(i,1); aprPT("evita",sl.ex); touch(); render(); toastUndo("Ejercicio quitado",()=>{ d.ejercicios.splice(Math.min(i,d.ejercicios.length),0,sl); touch(); render(); }); return true; }
+  if(a==="pt-swap"){ const prog=ptProgDe(t); state.modal={type:"pt-swap",prog:prog.id,d:t.dataset.d,u:t.dataset.u}; renderOverlay(); return true; }
   if(a==="pt-swap-ok"){ const md=state.modal; ptSwapEx(md.prog,md.d,md.u,t.dataset.ex); closeModal(); render(); return true; }
-  if(a==="pt-add-ex"){ const prog=ptProgActivo(PTUI.cid); state.modal={type:"pt-add",prog:prog.id,d:t.dataset.d}; renderOverlay(); return true; }
+  if(a==="pt-add-ex"){ const prog=ptProgDe(t); state.modal={type:"pt-add",prog:prog.id,d:t.dataset.d}; renderOverlay(); return true; }
   if(a==="pt-add-ok"){
     const md=state.modal, prog=D.programas.find(p=>p.id===md.prog), d=prog.dias.find(x=>x.id===md.d), e=PT_BY_ID[t.dataset.ex];
-    d.ejercicios.push(ptSlot(e,e.t==="c"?"acc":"iso",{nivel:prog.nivel,objetivo:prog.objetivo})); touch(); closeModal(); render(); return true; }
+    d.ejercicios.push(ptSlot(e,e.t==="c"?"acc":"iso",{nivel:prog.nivel,objetivo:prog.objetivo})); aprPT("afin",e.id); touch(); closeModal(); render(); return true; }
   if(a==="pt-copiar-prog"){ const prog=D.programas.find(p=>p.id===t.dataset.id); const txt=ptProgramaTexto(prog,ptCliente(prog.clienteId),PTUI.sem||1);
     (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast("Programa copiado — pégalo en WhatsApp"),()=>toast("No se pudo copiar")); return true; }
   if(a==="pt-copiar-checkin"){ const c=ptCliente(t.dataset.id); (navigator.clipboard?navigator.clipboard.writeText(ptCheckinTexto(c)):Promise.reject()).then(()=>toast("Mensaje copiado"),()=>toast("No se pudo copiar")); return true; }

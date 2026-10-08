@@ -2,9 +2,9 @@
 /* ============================================================
    MAIN · Sebas Fit — navegación, ajustes, acceso y arranque
    ============================================================ */
-const NAV=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio","planner","armar","playlists","guardadas"],"inicio"],
-  ["clientes","Clientes",["clientes","cliente"],"clientes"],["cotizador","Cotizador",["cotizador"],"cotizador"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
-const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
+const NAV=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio","planner","armar","formato","playlists","guardadas"],"inicio"],
+  ["clientes","Clientes",["clientes","cliente","plantilla"],"clientes"],["cotizador","Cotizador",["cotizador"],"cotizador"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
+const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["formato","Mi formato"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
 
 /* ---------- utilidades de interfaz ---------- */
 function copyText(txt,msg){
@@ -48,7 +48,7 @@ function renderNav(){
   nav.innerHTML=NAV.map(([k,l,screens,go])=>`<button data-action="go" data-screen="${go}" class="${screens.includes(state.screen)?"on":""}">${l}</button>`).join("");
 }
 function subnavHtml(){
-  if(!["inicio","planner","armar","playlists","guardadas"].includes(state.screen)) return "";
+  if(!["inicio","planner","armar","formato","playlists","guardadas"].includes(state.screen)) return "";
   return `<div class="wrap subnav"><div class="tabs">${SUBNAV_RUT.map(([k,l])=>`<button data-action="go" data-screen="${k}" class="${state.screen===k?"on":""}" ${k==="planner"&&!state.routine?"disabled":""}>${l}</button>`).join("")}</div></div>`;
 }
 function render(){
@@ -58,11 +58,14 @@ function render(){
   else if(s==="inicio") h=subnavHtml()+viewInicio();
   else if(s==="planner") h=subnavHtml()+(state.routine?viewPlanner():viewInicio());
   else if(s==="armar") h=subnavHtml()+viewArmar();
+  else if(s==="formato") h=subnavHtml()+viewFormato();
   else if(s==="playlists") h=subnavHtml()+viewPlaylists();
   else if(s==="guardadas") h=subnavHtml()+viewGuardadas();
   else if(s==="clientes") h=viewClientes();
   else if(s==="cliente") h=viewCliente();
+  else if(s==="plantilla") h=viewPlantilla();
   else if(s==="cotizador") h=viewCotizador();
+  else if(s==="yo") h=viewYo();
   else if(s==="ajustes") h=viewAjustes();
   else h=viewClases();
   app.innerHTML=h;
@@ -112,11 +115,13 @@ const Mods={
     if(a.startsWith("pt-")) return ptClick(a,t,e);
     if(a.startsWith("ct-")) return ctClick(a,t);
     if(a.startsWith("ar-")) return arClick(a,t);
+    if(a.startsWith("ap-")) return apClick(a,t);
     if(a.startsWith("mu-")) return musClick(a,t);
+    if(a.startsWith("yo-")) return yoClick(a,t);
     if(a.startsWith("aj-")){ ajClick(a); return true; }
     if(a==="go-cot"){ COTUI.draft=cotDraftNuevo(t.dataset.id||null); COTUI.tab="nueva"; state.screen="cotizador"; render(); window.scrollTo(0,0); return true; }
     if(a==="asignar-clase"){ if(!state.routine) return true; state.modal={type:"asignar"}; renderOverlay(); return true; }
-    if(a==="asignar-ok"){ const e2=clAsignarRutina(t.dataset.date,t.dataset.slot,state.routine.nombre); closeModal(); render(); toast(e2?"Rutina asignada a la clase":"No se pudo asignar"); return true; }
+    if(a==="asignar-ok"){ const e2=clAsignarRutina(t.dataset.date,t.dataset.slot,state.routine.nombre); aprAprobar(state.routine); closeModal(); render(); toast(e2?"Rutina asignada a la clase":"No se pudo asignar"); return true; }
     return false;
   },
   input(a,t){
@@ -124,6 +129,8 @@ const Mods={
     if(a.startsWith("pt-")) return ptInput(a,t);
     if(a.startsWith("ct-")) return ctInput(a,t);
     if(a.startsWith("ar-")) return arInput(a,t);
+    if(a.startsWith("ap-")) return apInput(a,t);
+    if(a.startsWith("yo-")) return yoInput(a,t);
     return false;
   },
   change(a,t){
@@ -136,6 +143,7 @@ const Mods={
   modal(md){
     if(md.type==="asignar") return modalAsignar();
     if(md.type.startsWith("pt-")) return ptModal(md);
+    if(md.type.startsWith("yo-")) return yoModal(md);
     return "";
   },
 };
@@ -144,7 +152,7 @@ document.addEventListener("change",e=>{
     const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
     f.text().then(txt=>restoreBackup(txt)).then(p=>{
       if(!confirm("¿Reemplazar todo lo que ves ahora con este respaldo ("+p.clases.entries.length+" clases, "+p.pt.clientes.length+" clientes)?")) return;
-      Vault.data=p; touch(); hydrateSculpt(); armRegistrarCustom(); ARMS=null; render(); toast("Respaldo cargado");
+      Vault.data=p; touch(); hydrateSculpt(); armRegistrarCustom(); aprRegistrarGuardado(); ARMS=null; render(); toast("Respaldo cargado");
     }).catch(()=>alert("Ese archivo no es un respaldo válido de esta cuenta."));
     return;
   }
@@ -156,7 +164,7 @@ document.addEventListener("change",e=>{
 function enterApp(){
   document.getElementById("authgate").classList.add("hidden");
   document.getElementById("appRoot").classList.add("on");
-  hydrateSculpt(); armRegistrarCustom(); ARMS=null; state.screen="hoy"; render();
+  hydrateSculpt(); armRegistrarCustom(); aprRegistrarGuardado(); ARMS=null; state.screen="hoy"; render();
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // pide que el navegador no borre los datos
   musSpotRetorno().then(ok=>{ if(ok){ state.screen="ajustes"; render(); } });
 }

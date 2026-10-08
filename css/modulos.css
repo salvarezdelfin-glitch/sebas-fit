@@ -347,3 +347,57 @@ button,input,select,textarea,a{touch-action:manipulation}
   .pt-day .sec-head .spacer{display:none}
   .pt-day .sec-head h3{flex:1 1 100%}
 }
+
+/* ---------- proceso del cliente: hitos 3/6/9/12 meses ---------- */
+.hitos{display:grid;gap:14px}
+.hito{background:var(--surface);border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:16px 18px}
+.hito.next{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.hito-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}
+.hito-head h3{font-size:26px;margin-top:4px}
+.hito-nums{display:flex;flex-wrap:wrap;gap:10px 18px}
+.hito-nums span{display:flex;flex-direction:column;align-items:flex-end} .hito-nums b{font-size:17px;color:var(--accent)} .hito-nums small{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.hito-real{font-size:13px;padding:8px 12px;border-radius:8px;margin-bottom:10px;background:rgba(127,183,126,.1);border:1px solid rgba(127,183,126,.35)}
+.hito-real.warn{background:rgba(227,171,82,.1);border-color:rgba(227,171,82,.4);color:var(--warn)}
+.hito-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+.hito ul{margin:6px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-dim)} .hito li{margin-bottom:5px}
+@media (max-width:720px){ .hito-cols{grid-template-columns:1fr} .hito-nums span{align-items:flex-start} }
+
+/* ---------- Mi formato (aprendizaje) ---------- */
+.apr-txt{min-height:220px;font-family:var(--f-mono);font-size:13px;line-height:1.5}
+.apr-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.apr-list{margin:8px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-dim)} .apr-list li{margin-bottom:4px}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)}
+
+/* ---------- Yo: entrenamiento fuerte ---------- */
+.yo-ses{background:var(--surface);border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
+.yo-ses.duro{border-left:3px solid var(--accent)}
+.yo-ses-h{display:flex;justify-content:space-between;gap:10px;align-items:baseline} .yo-ses-h b{font-size:16px}
+.yo-dur{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.yo-ses ul,.yo-det ul,.yo-plato ul,.yo-ul{margin:8px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-dim)} .yo-ses li,.yo-det li,.yo-plato li,.yo-ul li{margin-bottom:5px}
+.yo-ajuste{font-size:12.5px;color:var(--warn);margin-top:6px}
+.yo-clases{background:var(--accent-glow);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:13.5px;margin-bottom:14px}
+.yo-ck{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:10px} .yo-ck>span{min-width:96px;font-size:13px;color:var(--muted)}
+.yo-chips{display:flex;flex-wrap:wrap;gap:6px}
+.yo-chip{min-width:38px;min-height:38px;padding:0 10px;border-radius:9px;border:1px solid var(--hairline);background:var(--surface);font-weight:600;font-size:13.5px;color:var(--ink-dim)}
+.yo-chip.wide{padding:0 14px} .yo-chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent,#fff)}
+.yo-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px} .yo-nav>div{text-align:center} .yo-nav small{display:block;color:var(--muted);font-size:12.5px}
+.yo-semana{display:grid;gap:8px}
+.yo-dia{display:grid;grid-template-columns:96px 1fr;gap:12px;background:var(--surface);border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:10px 14px}
+.yo-dia.hoy{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.yo-dia-n{display:flex;flex-direction:column;gap:2px} .yo-dia-n small{color:var(--muted);font-size:12px}
+.yo-badge{display:inline-block;margin-top:4px;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--accent-glow);color:var(--accent);width:max-content}
+.yo-det{margin-bottom:4px} .yo-det summary{cursor:pointer;font-weight:600;font-size:14px;padding:3px 0} .yo-det.duro summary{color:var(--accent)} .yo-det summary small{font-weight:400;color:var(--muted)}
+.yo-lib{color:var(--muted);font-size:13.5px}
+.yo-ritmos{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;text-align:center} .yo-ritmos small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em} .yo-ritmos b{font-size:17px;font-family:var(--f-mono)}
+.yo-tabla{width:100%;border-collapse:collapse;font-size:13.5px} .yo-tabla th,.yo-tabla td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--hairline-soft)} .yo-tabla th{font-size:11px;color:var(--muted);text-transform:uppercase} .yo-tabla tr.hoy td{background:var(--accent-glow)}
+.yo-dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 4px 0 8px}
+.yo-lifts{display:grid;grid-template-columns:repeat(2,1fr);gap:14px} .yo-lift-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start} .yo-lift h3{margin:0}
+.yo-bar{height:8px;border-radius:99px;background:var(--hairline-soft);overflow:hidden;margin:10px 0 4px} .yo-bar i{display:block;height:100%;background:var(--accent)}
+.yo-hoy-kg{font-size:14px;background:var(--surface-2,var(--hairline-soft));border-radius:8px;padding:8px 12px;margin:8px 0}
+.yo-reg{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--hairline-soft);font-size:13.5px} .yo-reg:last-child{border:0} .yo-reg small{color:var(--muted);margin-left:auto}
+.yo-reg .x{background:none;border:0;color:var(--muted);font-size:14px;padding:4px 8px}
+.yo-menu{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px}
+.yo-plato{background:var(--surface);border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:12px 14px} .yo-plato-h{display:flex;flex-direction:column;gap:2px} .yo-plato-h small{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.yo-libre{background:var(--accent-glow)!important}
+.yo-base{margin-bottom:6px} .alert.bad{border-left-color:#d65454;background:rgba(214,84,84,.09)}
+@media (max-width:720px){ .yo-lifts,.yo-menu{grid-template-columns:1fr} .yo-ritmos{grid-template-columns:repeat(3,1fr)} .yo-dia{grid-template-columns:1fr} .yo-dia-n{flex-direction:row;align-items:baseline;gap:8px} }

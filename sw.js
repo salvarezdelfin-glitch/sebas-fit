@@ -1,6 +1,6 @@
-const CACHE = "sebasfit-v3";
+const CACHE = "sebasfit-v6";
 const SHELL = ["./","./index.html","./manifest.webmanifest","./css/fonts.css","./css/lock.css","./css/sculpt.css","./css/modulos.css",
-  "./js/fflate.js","./js/core.js","./js/sculpt.js","./js/estacion.js","./js/armar.js","./js/musica.js","./js/clases.js","./js/ptlib.js","./js/pt.js","./js/cot.js","./js/main.js",
+  "./js/fflate.js","./js/core.js","./js/sculpt.js","./js/estacion.js","./js/armar.js","./js/aprender.js","./js/musica.js","./js/clases.js","./js/ptlib.js","./js/pt.js","./js/pt2.js","./js/proyeccion.js","./js/yo.js","./js/yo-ui.js","./js/cot.js","./js/main.js",
   "./icon-192.png","./icon-512.png","./apple-touch-icon.png","./favicon.png",
   "./fonts/BarlowCondensed-500-latin-ext.woff2","./fonts/BarlowCondensed-500-latin.woff2","./fonts/BarlowCondensed-600-latin-ext.woff2","./fonts/BarlowCondensed-600-latin.woff2","./fonts/BarlowCondensed-700-latin-ext.woff2","./fonts/BarlowCondensed-700-latin.woff2","./fonts/HankenGrotesk-400-latin-ext.woff2","./fonts/HankenGrotesk-400-latin.woff2","./fonts/IBMPlexMono-400-latin-ext.woff2","./fonts/IBMPlexMono-400-latin.woff2","./fonts/IBMPlexMono-500-latin-ext.woff2","./fonts/IBMPlexMono-500-latin.woff2","./fonts/IBMPlexMono-600-latin-ext.woff2","./fonts/IBMPlexMono-600-latin.woff2"];
 

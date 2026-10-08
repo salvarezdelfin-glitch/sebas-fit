@@ -19,9 +19,10 @@ function r5(n){ return n>=20?Math.round(n/5)*5:Math.round(n); }
 /* q (plantilla) → cantidad concreta */
 function estQ(q,base,difKey){
   const d=estDif(difKey), o={t:q.t};
+  const apr=typeof aprAjustarCantidad==="function";   // lo que sueles usar (aprendido) se mezcla con lo generado
   if(q.t==="reps"){ o.n=q.n||Math.round(base*(q.f||1)); }
-  else if(q.t==="pulsos"){ o.n=r5(Math.min(40,base*(q.f||3)*d.pul)); }
-  else if(q.t==="hold"){ o.s=Math.max(10,Math.round(q.s*d.hold/5)*5); }
+  else if(q.t==="pulsos"){ o.n=q.n||(apr?aprAjustarCantidad("pulsos",r5(Math.min(40,base*(q.f||3)*d.pul)),10):r5(Math.min(40,base*(q.f||3)*d.pul))); }
+  else if(q.t==="hold"){ o.s=q.fijo?q.s:Math.max(10,apr?aprAjustarCantidad("hold",Math.round(q.s*d.hold/5)*5,10):Math.round(q.s*d.hold/5)*5); }
   if(q.por) o.por=q.por;
   if(q.nota) o.nota=q.nota;
   return o;
@@ -235,7 +236,8 @@ const EST_NOM={up:"Tren superior",leg:"Pierna",glu:"Glúteo",abs:"Abs",plk:"Plan
 const EST_TAG={up:"up",leg:"low",glu:"low",abs:"core",plk:"core"};
 function estPick(arr,n,uso){
   const u=(state.historia&&state.historia.uso)||{}, aj=(state.historia&&state.historia.ajuste)||{};
-  const sc=x=>(u[x.id||x]||0)+(aj[x.id||x]||0)+Math.random()*0.9;
+  const bo=x=>typeof aprBoostId==="function"?aprBoostId(x.id||x):0;   // prefiere lo que ya usas, evita lo que quitas
+  const sc=x=>(u[x.id||x]||0)+(aj[x.id||x]||0)-bo(x)+Math.random()*0.9;
   return arr.slice().sort((a,b)=>sc(a)-sc(b)).slice(0,n);
 }
 function estSlot(step,ctx,side){
@@ -243,7 +245,10 @@ function estSlot(step,ctx,side){
   const s=slot(step); s.q=q; s.base=null; s.lado=false; s.side=side||null; s.eq=step.eq; s.trans=step.tr||"";
   return s;
 }
+/* pools dinámicos: incluyen lo que la app aprendió de ti */
+function estPoolBlk(blk){ return LIB.filter(e=>e.b==="st"&&e.blk===blk&&e.layer==="x"&&(blk!=="abs"||e.fn)); }
 function estAnchorSteps(A,size,difKey){
+  if(A.custom) return A.layers.map(id=>byId[id]);   // tu estación se respeta tal cual la enseñaste
   const L=A.layers.map(id=>byId[id]);
   const by=k=>L.find(x=>x.layer===k);
   const d=estDif(difKey);
@@ -260,7 +265,8 @@ function estBloque(kind,idx,ctx,used){
   if(kind==="up"){
     const ent=estPick(LIB.filter(e=>e.anchor==="up_ent"),1)[0], pl=estPick(LIB.filter(e=>e.anchor==="up_pl"),1)[0], hold=estPick(LIB.filter(e=>e.anchor==="up_hold"),1)[0], reg=estPick(LIB.filter(e=>e.anchor==="up_reg"),1)[0];
     [ent,pl,hold,reg].forEach(s=>add(s));
-    const trios=estPick(["up_s_hombro","up_s_espalda","up_s_brazos","up_s_mix"].map(a=>({id:a})),size==="L"?2:1).map(x=>x.id);
+    const triosIds=[...new Set(LIB.filter(e=>e.anchor&&e.anchor.indexOf("up_s_")===0).map(e=>e.anchor))];
+    const trios=estPick(triosIds.map(a=>({id:a})),size==="L"?2:1).map(x=>x.id);
     trios.forEach((a,k)=>{ const steps=LIB.filter(e=>e.anchor===a).sort((x,y)=>x.ord-y.ord); (size==="S"?steps.slice(0,2):steps).forEach(s=>add(s)); });
     sec.nom="Bloque "+idx+" · Tren superior (mancuernas)"; ctx.eq.add("mancuernas");
   } else if(kind==="leg"){
@@ -282,12 +288,12 @@ function estBloque(kind,idx,ctx,used){
       if(An.lados){ L.forEach(s=>add(s,"A")); L.forEach(s=>add(s,"B")); } else L.forEach(s=>add(s)); ctx.eq.add(An.eq); });
     const An0=EST_ANCHORS[A[0].id]; sec.nom="Bloque "+idx+" · Glúteo ("+An0.anchorNom.toLowerCase()+")"; sec.anchor=An0.id;
   } else if(kind==="abs"){
-    const n=size==="S"?3:size==="L"?6:4, fns=["anterior","rotacion","inferior","estabilidad"], chosen=[];
-    for(let i=0;i<n;i++){ const fn=fns[i%fns.length]; const c=estPick(EST_ABS.filter(e=>e.fn===fn&&!chosen.includes(e)),1)[0]; if(c) chosen.push(c); }
+    const n=(typeof aprPasosBloque==="function")?aprPasosBloque("abs",size==="S"?3:size==="L"?6:4):(size==="S"?3:size==="L"?6:4), fns=["anterior","rotacion","inferior","estabilidad"], chosen=[];
+    for(let i=0;i<n;i++){ const fn=fns[i%fns.length]; const c=estPick(estPoolBlk("abs").filter(e=>e.fn===fn&&!chosen.includes(e)),1)[0]; if(c) chosen.push(c); }
     // de más suave a más exigente: anterior, rotación, inferior, estabilidad
     chosen.forEach(s=>add(s)); sec.nom="Bloque "+idx+" · Abs (mancuernas)"; sec.tag="core"; ctx.eq.add("mancuernas");
   } else if(kind==="plk"){
-    estPick(EST_PLK,size==="S"?3:size==="L"?6:4).forEach(s=>add(s)); sec.nom="Bloque "+idx+" · Planchas"; ctx.eq.add("peso corporal");
+    estPick(estPoolBlk("plk"),size==="S"?3:size==="L"?6:4).forEach(s=>add(s)); sec.nom="Bloque "+idx+" · Planchas"; ctx.eq.add("peso corporal");
   }
   return sec;
 }
@@ -304,8 +310,10 @@ function generateEstacion(cfg){
   const ctx={size,dif,base,eq:new Set()}, used=new Set(), sections=[];
   if(cfg.calent) sections.push({id:rid(),nom:"Calentamiento",tag:"prep",kind:"prep",slots:shuffle(LIB.filter(e=>e.b==="prep"&&e.id!=="w_aprox")).slice(0,4).map(slot)});
   let kinds=(size==="S"?EST_MODOS_S[cfg.modo]:EST_MODOS[cfg.modo])||EST_MODOS.full;
+  const aprK=(typeof aprEstructura==="function")?aprEstructura(cfg.modo):null;   // el orden de bloques que más usas
+  if(aprK) kinds=size==="S"?(aprK.filter(k=>k!=="glu").length>=3?aprK.filter(k=>k!=="glu"):aprK.slice(0,3)):aprK;
   kinds.forEach((k,i)=>sections.push(estBloque(k,i+1,ctx,used)));
-  const reto=estPick(EST_RETO,1)[0];
+  const reto=estPick(estPoolBlk("reto"),1)[0];
   sections.push({id:rid(),nom:"Reto final",tag:"core",kind:"finisher",slots:[estSlot(reto,ctx)],bk:"reto"});
   if(cfg.enfr){
     const cs=EST_CIERRE.slice(0,2); if(size==="L") cs.push(EST_CIERRE[2]);
@@ -390,7 +398,7 @@ function editarCantidad(k,v,silent){
     s.pat=v==="reps"?"reps":v==="pulsos"?"pulsos":"iso"; }
   else if(k==="n"){ s.q.n=Math.max(1,Number(v)||1); }
   else if(k==="s"){ s.q.s=Math.max(5,Number(v)||30); }
-  if(!silent) renderOverlay();
+  if(!silent){ if(typeof aprSenalCantidad==="function") aprSenalCantidad(s.q); renderOverlay(); }
 }
 /* cronómetro de holds (cuenta regresiva) y de "a la falla" (cuenta hacia arriba) */
 function ivHoldStop(){ const iv=state.iv; if(!iv) return; if(iv.holdT){ clearInterval(iv.holdT); iv.holdT=null; } iv.hold=null; }

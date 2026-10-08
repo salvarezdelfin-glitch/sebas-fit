@@ -30,6 +30,7 @@ function emptyData(){
     sf:{},
     pt:{clientes:[],programas:[],sesiones:[],medidas:[],paquetes:[],pagos:[]},
     cot:{precios:null,cotizaciones:[],seq:0,cfg:{}},
+    yo:{perfil:{},metas:{},base:{},plan:{},carreras:[],pesas:[],pesos:[],config:{}},
   };
 }
 /* acepta el formato v1 (Clases Semanales: schedule/rates/payinfo/entries en la raíz) y el v2 */
@@ -37,7 +38,7 @@ function migrate(p){
   const d=emptyData();
   if(!p||typeof p!=="object") return d;
   if(p.app===2){
-    Object.assign(d.clases,p.clases||{}); Object.assign(d.sf,p.sf||{}); Object.assign(d.pt,p.pt||{}); Object.assign(d.cot,p.cot||{});
+    Object.assign(d.clases,p.clases||{}); Object.assign(d.sf,p.sf||{}); Object.assign(d.pt,p.pt||{}); Object.assign(d.cot,p.cot||{}); Object.assign(d.yo,p.yo||{});
   } else {
     d.clases.schedule=p.schedule||[]; d.clases.rates=Object.assign(d.clases.rates,p.rates||{});
     d.clases.payinfo=p.payinfo||[]; d.clases.entries=p.entries||[];
@@ -47,6 +48,8 @@ function migrate(p){
   ["clientes","programas","sesiones","medidas","paquetes","pagos"].forEach(k=>{ if(!Array.isArray(d.pt[k])) d.pt[k]=[]; });
   if(!Array.isArray(d.cot.cotizaciones)) d.cot.cotizaciones=[];
   if(!d.cot.cfg||typeof d.cot.cfg!=="object") d.cot.cfg={};
+  ["perfil","metas","base","plan","config"].forEach(k=>{ if(!d.yo[k]||typeof d.yo[k]!=="object"||Array.isArray(d.yo[k])) d.yo[k]={}; });
+  ["carreras","pesas","pesos"].forEach(k=>{ if(!Array.isArray(d.yo[k])) d.yo[k]=[]; });
   if(!d.clases.rates||typeof d.clases.rates!=="object") d.clases.rates=emptyData().clases.rates;
   return d;
 }
@@ -54,7 +57,7 @@ function migrate(p){
 /* ---------- fusión: nunca perder registros entre dispositivos ---------- */
 const ID_ARRAYS=[["clases","schedule"],["clases","payinfo"],["clases","entries"],["clases","cobros"],
   ["pt","clientes"],["pt","programas"],["pt","sesiones"],["pt","medidas"],["pt","paquetes"],["pt","pagos"],
-  ["cot","cotizaciones"],["sf","saved"],["sf","programas"],["sf","historial"],["sf","playlists"],["sf","musiclib"]];
+  ["cot","cotizaciones"],["yo","carreras"],["yo","pesas"],["yo","pesos"],["sf","saved"],["sf","programas"],["sf","historial"],["sf","playlists"],["sf","musiclib"]];
 /* "newer" gana en conflictos; lo que solo existe en "older" se conserva */
 function mergeData(older,newer){
   const out=clone(newer);

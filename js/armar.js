@@ -22,7 +22,7 @@ function armCrearCustom(a){
   const q=a.q||{t:"reps",n:8}, id="cu_"+armHash(a.nom.toLowerCase()+"|"+q.t);
   if(byId[id]) return byId[id];
   const e={id,b:"st",blk:a.blk||"libre",anchor:"cu_"+id,layer:"x",nom:a.nom,eq:a.eq||"peso corporal",pat:q.t==="hold"||q.t==="falla"?"iso":q.t==="pulsos"?"pulsos":"reps",
-    tempo:null,lado:false,f:a.f==null?0:a.f,comp:0,cue:a.cue||"Ejercicio propio.",q:{t:q.t,n:q.n,s:q.s,f:q.f},tr:"",custom:1};
+    tempo:null,lado:false,f:a.f==null?0:a.f,comp:0,cue:a.cue||"Ejercicio propio.",q:{t:q.t,n:q.n,s:q.s,f:q.f,fijo:q.fijo},tr:"",custom:1};
   const list=armCustomList(); if(!list.some(x=>x.id===id)){ list.push(clone(e)); touch(); }
   return armRegistrar(e);
 }
@@ -140,11 +140,11 @@ function armSugerir(b){
     const ancs=new Set(steps.map(s=>(byId[s.ref]||{}).anchor));
     const falta=ARM_UP_PASOS.find(([a])=>!ancs.has(a));
     if(falta){ LIB.filter(x=>x.anchor===falta[0]).forEach(x=>add("bloque",{label:x.nom,sub:falta[1],kind:"lib",ref:x.id})); }
-    else ["up_s_hombro","up_s_espalda","up_s_brazos","up_s_mix"].filter(a=>!ancs.has(a)).forEach(a=>{ const L=LIB.filter(x=>x.anchor===a).sort((x,y)=>x.ord-y.ord); add("bloque",{label:"Trío: "+L.map(x=>x.nom.split(" ")[0]).join(" · "),sub:"3 pasos de pie",kind:"lista",refs:L.map(x=>x.id)}); });
+    else [...new Set(LIB.filter(e=>e.anchor&&e.anchor.indexOf("up_s_")===0).map(e=>e.anchor))].filter(a=>!ancs.has(a)).forEach(a=>{ const L=LIB.filter(x=>x.anchor===a).sort((x,y)=>x.ord-y.ord); add("bloque",{label:"Trío: "+L.map(x=>x.nom.split(" ")[0]).join(" · "),sub:"3 pasos de pie",kind:"lista",refs:L.map(x=>x.id)}); });
   } else if(b.bk==="leg"||b.bk==="glu"){
     Object.values(EST_ANCHORS).filter(a=>a.blk===b.bk&&!usadas.has(a.id)).sort((x,y)=>(y.eq===(e&&e.eq)?1:0)-(x.eq===(e&&e.eq)?1:0)).forEach(a=>add("bloque",{label:a.anchorNom,sub:"estación completa · "+a.layers.length+" pasos"+(a.lados?" × 2 lados":""),kind:"ancla",anchor:a.id}));
   } else if(b.bk==="abs"||b.bk==="plk"||b.bk==="reto"||b.bk==="cierre"){
-    const pool=b.bk==="abs"?EST_ABS:b.bk==="plk"?EST_PLK:b.bk==="reto"?EST_RETO:EST_CIERRE, en=new Set(steps.map(s=>s.ref));
+    const pool=b.bk==="cierre"?EST_CIERRE:estPoolBlk(b.bk), en=new Set(steps.map(s=>s.ref));
     const fns=new Set(steps.map(s=>(byId[s.ref]||{}).fn));
     pool.filter(x=>!en.has(x.id)).sort((x,y)=>(fns.has(x.fn)?1:0)-(fns.has(y.fn)?1:0)).forEach(x=>add("bloque",{label:x.nom,sub:b.bk==="abs"?"función: "+x.fn:"",kind:"lib",ref:x.id}));
   }
@@ -195,7 +195,7 @@ function armArmarRutina(){
     sections.push(sec); });
   const reto=S.blocks.find(b=>b.bk==="reto"&&b.steps.length);
   if(reto) sections.push({id:rid(),nom:"Reto final",tag:"core",kind:"finisher",bk:"reto",slots:reto.steps.map(st=>{ const e=byId[st.ref], s=slot(e); s.q=st.q||estQ(e.q,S.base,S.dif); return s; })});
-  else if(S.reto) sections.push({id:rid(),nom:"Reto final",tag:"core",kind:"finisher",bk:"reto",slots:[estSlot(estPick(EST_RETO,1)[0],ctx)]});
+  else if(S.reto) sections.push({id:rid(),nom:"Reto final",tag:"core",kind:"finisher",bk:"reto",slots:[estSlot(estPick(estPoolBlk("reto"),1)[0],ctx)]});
   const ci=S.blocks.find(b=>b.bk==="cierre"&&b.steps.length);
   if(ci) sections.push({id:rid(),nom:"Cierre",tag:"prep",kind:"cool",bk:"cierre",slots:ci.steps.map(st=>{ const e=byId[st.ref], s=slot(e); s.q=st.q||estQ(e.q,S.base,S.dif); return s; })});
   else if(S.cierre) sections.push({id:rid(),nom:"Cierre",tag:"prep",kind:"cool",bk:"cierre",slots:EST_CIERRE.slice(0,2).map(x=>estSlot(x,ctx))});
@@ -261,7 +261,7 @@ function arClick(a,t){
   if(a==="ar-base"){ S.base=Number(t.dataset.v); armGuardar(); render(); return true; }
   if(a==="ar-reset"){ if(confirm("¿Borrar el borrador y empezar de nuevo?")){ ARMS=null; LS.set("sf_armar",null); armInit(); render(); } return true; }
   if(a==="ar-use"){
-    const r=armArmarRutina(); state.routine=r; state.cfg.metodo="sculpt"; state.screen="planner"; render(); window.scrollTo(0,0); toast("Clase lista · ≈ "+estimateMinutes(r)+" min"); return true; }
+    const r=armArmarRutina(); if(typeof aprAprender==="function") aprAprender(r,2,"armada"); state.routine=r; state.cfg.metodo="sculpt"; state.screen="planner"; render(); window.scrollTo(0,0); toast("Clase lista · ≈ "+estimateMinutes(r)+" min"); return true; }
   // "+ Añadir" de cualquier rutina: escribir un ejercicio propio
   if(a==="ar-pk-add"){
     const md=state.modal, el=document.getElementById("ar-pk-txt"), txt=el?el.value.trim():""; if(!txt){ toast("Escribe el ejercicio"); return true; }

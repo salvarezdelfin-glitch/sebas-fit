@@ -432,8 +432,8 @@ function bumpHistoria(r){
 function registrarFeedback(routine,energia,malos,favorito,notaMusica,notaLibre){
   const h=state.historia;
   for(const k in h.ajuste){ h.ajuste[k]*=0.6; if(Math.abs(h.ajuste[k])<0.15) delete h.ajuste[k]; }
-  malos.forEach(id=>{ h.ajuste[id]=(h.ajuste[id]||0)+1.6; });
-  if(favorito){ h.ajuste[favorito]=(h.ajuste[favorito]||0)-1.1; }
+  malos.forEach(id=>{ h.ajuste[id]=(h.ajuste[id]||0)+1.6; aprSenal("malo",id); });
+  if(favorito){ h.ajuste[favorito]=(h.ajuste[favorito]||0)-1.1; aprSenal("favorito",favorito); }
   LS.set("sf_historia",h);
   const entry={id:rid(),fecha:Date.now(),metodo:routine.metodo,nombre:routine.nombre,
     energia,malos:malos.slice(),favorito:favorito||null,notaMusica:notaMusica||"",notaLibre:notaLibre||""};
@@ -948,7 +948,7 @@ function sculptParams(c){
     <div class="field" style="gap:14px">
       <label class="lbl"><span class="eyebrow">Estilo de clase</span></label>
       <div class="seg"><button data-action="set-estilo" data-v="estacion" class="${(c.estilo||"estacion")==="estacion"?'on':''}">Estaciones · como tus clases</button><button data-action="set-estilo" data-v="lista" class="${c.estilo==="lista"?'on':''}">Lista de ejercicios</button></div>
-      ${(c.estilo||"estacion")==="estacion"?`<p class="hint"><b>Estaciones</b>: cada bloque es una posición trabajada en capas — entrada, hold, pulsos, liga, variante y hold a la falla. Glúteo con <b>Lado A</b> completo y luego <b>Lado B</b>, abdomen con 4 movimientos distintos, <b>Reto final</b> y <b>Cierre</b> con relajación. Material: mancuernas, silla o cubo, liga y polainas.</p>`
+      ${(c.estilo||"estacion")==="estacion"?`<p class="hint">🧠 Sigue tu formato: ${esc(aprResumen())}. <button class="link-btn" data-action="go" data-screen="formato">Ver o enseñar mi formato →</button></p><p class="hint"><b>Estaciones</b>: cada bloque es una posición trabajada en capas — entrada, hold, pulsos, liga, variante y hold a la falla. Glúteo con <b>Lado A</b> completo y luego <b>Lado B</b>, abdomen con 4 movimientos distintos, <b>Reto final</b> y <b>Cierre</b> con relajación. Material: mancuernas, silla o cubo, liga y polainas.</p>`
       :`<div class="seg">${[4,5,6].map(n=>`<button data-action="set-porbloque" data-v="${n}" class="${c.porBloque===n?'on':''}">3 bloques × ${n}</button>`).join("")}</div>
       <p class="hint">Formato anterior: <b>3 bloques de 6</b> ejercicios sueltos en mat.</p>`}
       <label class="lbl" style="margin-top:4px"><span class="eyebrow" style="color:var(--muted)">Sistema de repeticiones</span></label>
@@ -1768,7 +1768,8 @@ function findSlot(secId,u){ const S=state.routine.sections.find(x=>x.id===secId)
 function reTrans(){ const r=state.routine; if(r.estilo==="estacion") estTransiciones(r); else computeTransitions(r.sections, r.metodo, r.descanso); }
 function moveSlot(secId,u,dir){ const {S}=findSlot(secId,u); const i=S.slots.findIndex(x=>x.uid===u), j=i+dir;
   if(j<0||j>=S.slots.length)return; [S.slots[i],S.slots[j]]=[S.slots[j],S.slots[i]]; reTrans(); render(); }
-function delSlot(secId,u){ const {S}=findSlot(secId,u); S.slots=S.slots.filter(x=>x.uid!==u); reTrans(); render(); }
+function delSlot(secId,u){ const {S}=findSlot(secId,u); const _q=S.slots.find(x=>x.uid===u); if(_q&&state.routine.estilo==="estacion") aprSenal("quito",_q.ref);   // aprende lo que quitas
+  S.slots=S.slots.filter(x=>x.uid!==u); reTrans(); render(); }
 function swapSlot(secId,u){
   const r=state.routine, {S,s}=findSlot(secId,u);
   let pool;
@@ -1782,10 +1783,10 @@ function swapSlot(secId,u){
   if(r.estilo==="estacion"&&byId[s.ref].q){ const st=estSwapPool(S,s); if(st.length) pool=st; }
   let cand=shuffle(pool).find(e=>!inUse.has(e.id)) || shuffle(pool).find(e=>e.id!==s.ref);
   if(!cand)return;
-  const i=S.slots.findIndex(x=>x.uid===u); const old=S.slots[i];
+  const i=S.slots.findIndex(x=>x.uid===u); const old=S.slots[i]; if(r.estilo==="estacion") aprSenal("cambio",old.ref,cand.id);
   S.slots[i]=(cand.q&&r.estilo==="estacion")?estSlot(cand,{base:r.base||8,dif:r.nivel},old.side):slot(cand); reTrans(); render();
 }
-function addPicked(secId,exId){ const r=state.routine, S=r.sections.find(x=>x.id===secId), ex=byId[exId];
+function addPicked(secId,exId){ const r=state.routine, S=r.sections.find(x=>x.id===secId), ex=byId[exId]; if(r.estilo==="estacion") aprSenal("agrego",exId);
   S.slots.push(ex.q&&r.estilo==="estacion"?estSlot(ex,{base:r.base||8,dif:r.nivel}):slot(ex)); reTrans(); closeModal(); render(); }
 function setSlotField(f,v,silent){ const md=state.modal, {s}=findSlot(md.sec,md.uid); if(!s)return; s[f]=v; if(!silent)renderOverlay(); }
 function recomputeAndRender(){ reTrans(); render(); }
@@ -1815,7 +1816,7 @@ function doSave(){
   const nom=document.getElementById("sv-nom").value.trim()||state.routine.nombre;
   state.routine.nombre=nom;
   const snap=deepClone(state.routine); snap.id=rid(); snap.creada=Date.now();
-  state.saved.unshift(snap); LS.set("sf_saved",state.saved); closeModal(); render(); toast("Rutina guardada");
+  state.saved.unshift(snap); LS.set("sf_saved",state.saved); aprAprobar(state.routine); closeModal(); render(); toast("Rutina guardada");
 }
 function loadSaved(id){
   const r=state.saved.find(x=>x.id===id); if(!r)return;
