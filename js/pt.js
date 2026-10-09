@@ -7,7 +7,7 @@
    ============================================================ */
 const PT_D=()=>Vault.data.pt;
 const PTUI={cid:null,tab:"resumen",filtro:"activos",sem:null,ses:null,graf:null,genSel:null,addPat:"sentadilla"};
-const PT_TABS=[["resumen","Resumen"],["programa","Programa"],["proceso","Proceso"],["sesion","Sesión"],["progreso","Progreso"],["pagos","Pagos"]];
+const PT_TABS=[["resumen","Resumen"],["programa","Programa"],["proceso","Proceso"],["seguimiento","Seguimiento"],["sesion","Sesión"],["progreso","Progreso"],["pagos","Pagos"]];
 const PT_ZONAS=[["rodilla","Rodilla"],["hombro","Hombro"],["espalda","Espalda baja"],["muneca","Muñeca"]];
 const PT_SCHED={2:"Lun · Jue",3:"Lun · Mié · Vie",4:"Lun · Mar · Jue · Vie",5:"Lun · Mar · Mié · Vie · Sáb",6:"Lun a Sáb"};
 const PT_MODALIDAD={presencial:"Presencial",remoto:"Rutina mandada"};
@@ -28,7 +28,8 @@ const PT_DIAS_TPL={
   GLU_B:{n:"Glúteo B (unilateral)",s:[["unilateral","main"],["gluteo","main"],["bisagra","acc"],["gluteo","iso"],["pantorrilla","iso"],["core","core"]]},
   UP_LITE:{n:"Tren superior (ligero)",s:[["empuje_h","acc"],["traccion_h","acc"],["empuje_v","iso"],["traccion_v","acc"],["biceps","iso"],["triceps","iso"]]},
 };
-function ptSplit(nivel,obj,dias){
+function ptSplit(nivel,obj,dias,estilo){
+  { const sp=ptSplitEstilo(estilo,nivel,dias); if(sp) return sp; }
   if(obj==="gluteo"){
     return ({2:["GLU_A","UP_LITE"],3:["GLU_A","UP_LITE","GLU_B"],4:["GLU_A","UPPER_A","GLU_B","UPPER_B"],5:["GLU_A","UPPER_A","GLU_B","UP_LITE","LOWER_A"],6:["GLU_A","UPPER_A","GLU_B","UPPER_B","LOWER_A","UP_LITE"]})[dias];
   }
@@ -71,11 +72,13 @@ function ptPickEx(patron,rol,ctx){
   return pool[0];
 }
 function ptSlot(ex,rol,cfg){
-  const tbl=cfg.nivel==="basico"?(cfg.objetivo==="fuerza"?PT_RX_BASICO_FUERZA:PT_RX_BASICO):PT_RX[cfg.objetivo];
+  const tbl=cfg.estilo==="circuito"?PT_RX_CIRC:cfg.estilo==="fuerza"?PT_RX_FB:cfg.nivel==="basico"?(cfg.objetivo==="fuerza"?PT_RX_BASICO_FUERZA:PT_RX_BASICO):PT_RX[cfg.objetivo];
   let [lo,hi,rest]=tbl[rol==="core"?"core":rol];
   let sets=PT_SETS[cfg.nivel][rol];
   if(cfg.nivel==="avanzado"&&cfg.objetivo==="fuerza"&&rol==="main") sets=5;
   if(cfg.nivel==="avanzado"&&rol==="acc") sets=4;
+  if(cfg.estilo==="fuerza"&&rol==="main") sets=cfg.nivel==="basico"?3:5;
+  if(cfg.estilo==="circuito") sets=cfg.nivel==="basico"?2:3;
   if(ex.seg){ [lo,hi]=PT_SEG[cfg.nivel]; rest=45; }
   if(ex.n===1&&ex.p==="core"&&!ex.seg){ lo=10; hi=15; }
   return {uid:newId("x"),ex:ex.id,rol,sets,lo,hi,rir:ex.seg?null:PT_RIR[cfg.nivel],rest,seg:!!ex.seg,nota:""};
@@ -132,8 +135,8 @@ function ptEquilibrar(prog){
 function ptGenerar(cfg){
   const nivelN=PT_NIVELES[cfg.nivel].n;
   let dias=cfg.dias; if(cfg.nivel==="basico") dias=Math.min(dias,4); if(cfg.nivel==="avanzado") dias=Math.max(dias,3);
-  const split=ptSplit(cfg.nivel,cfg.objetivo,dias);
-  const ctx={equipo:cfg.equipo,nivelN,contra:cfg.lesiones||[],obj:cfg.objetivo,used:new Set(),dayUsed:null};
+  const split=ptSplit(cfg.nivel,cfg.objetivo,dias,cfg.estilo);
+  const ctx={equipo:cfg.equipo,nivelN,contra:cfg.lesiones||[],obj:cfg.objetivo,used:new Set(cfg.evitar||[]),dayUsed:null};
   const out=split.map((k,i)=>{
     ctx.dayUsed=new Set(); const T=PT_DIAS_TPL[k], ejs=[];
     T.s.forEach(([p,rol])=>{ const ex=ptPickEx(p,rol,ctx); if(ex){ ctx.dayUsed.add(ex.id); ctx.used.add(ex.id); ejs.push(ptSlot(ex,rol,cfg)); } });
@@ -141,8 +144,8 @@ function ptGenerar(cfg){
   });
   const prog={id:newId("pg"),clienteId:cfg.clienteId||null,nombre:cfg.nombre||(PT_OBJETIVOS[cfg.objetivo].nom+" · "+PT_NIVELES[cfg.nivel].nom),
     nivel:cfg.nivel,objetivo:cfg.objetivo,equipo:cfg.equipo,semanas:cfg.semanas,diasSem:dias,minutos:cfg.minutos||60,lesiones:cfg.lesiones||[],
-    inicio:cfg.inicio||todayStr(),activo:true,dias:out,creado:nowISO()};
-  ptEquilibrar(prog);
+    inicio:cfg.inicio||todayStr(),activo:true,dias:out,creado:nowISO(),cardioCfg:{modo:cfg.cardio||"auto",extra:0},estilo:cfg.estilo||"auto"};
+  if(!["fuerza","circuito"].includes(cfg.estilo)) ptEquilibrar(prog);
   return prog;
 }
 /* ---------- fases de la progresión ---------- */
@@ -158,7 +161,7 @@ function ptFase(prog,w){
   return {k:"pico",nom:"Pico",rirAdj:-1,setsAdj:1,desc:"Más intensidad: una serie extra en los básicos y menos margen."};
 }
 function ptRx(prog,sl,w){
-  const f=ptFase(prog,w); let sets=sl.sets; if(f.setsAdj&&sl.rol==="main") sets+=f.setsAdj; if(f.deload) sets=Math.max(2,Math.ceil(sets*0.6));
+  const f=ptFase(prog,w); let sets=sl.sets; if(f.setsAdj&&sl.rol==="main") sets+=f.setsAdj; if(sl.rol==="main"&&prog.ajusteMain&&!f.deload) sets+=prog.ajusteMain; if(f.deload) sets=Math.max(2,Math.ceil(sets*0.6));
   const rir=sl.rir==null?null:Math.max(0,Math.min(5,sl.rir+f.rirAdj));
   return {sets,lo:sl.lo,hi:sl.hi,rir,rest:sl.rest,seg:!!sl.seg,fase:f};
 }
@@ -290,7 +293,7 @@ function viewClientes(){
 function viewCliente(){
   const c=ptCliente(PTUI.cid); if(!c){ PTUI.cid=null; return viewClientes(); }
   const tabs=PT_TABS.map(([k,l])=>`<button data-action="pt-tab" data-v="${k}" class="${PTUI.tab===k?"on":""}">${l}</button>`).join("");
-  const body=PTUI.tab==="programa"?ptTabPrograma(c):PTUI.tab==="proceso"?ptTabProceso(c):PTUI.tab==="sesion"?ptTabSesion(c):PTUI.tab==="progreso"?ptTabProgreso(c):PTUI.tab==="pagos"?ptTabPagos(c):ptTabResumen(c);
+  const body=PTUI.tab==="programa"?ptTabPrograma(c):PTUI.tab==="proceso"?ptTabProceso(c):PTUI.tab==="seguimiento"?ptTabSeguimiento(c):PTUI.tab==="sesion"?ptTabSesion(c):PTUI.tab==="progreso"?ptTabProgreso(c):PTUI.tab==="pagos"?ptTabPagos(c):ptTabResumen(c);
   return `<div class="wrap">
     <div class="back-row"><button class="btn sm ghost" data-action="pt-back">← Clientes</button></div>
     <header class="page-head cli-head"><div><span class="eyebrow">${PT_MODALIDAD[c.modalidad]} · ${esc(PT_EQUIPO[c.equipo].nom)}</span><h1>${esc(c.nombre)}</h1>
@@ -338,12 +341,12 @@ function ptProgramaBody(prog,c){
           <div class="acts"><button class="btn sm" data-action="pt-swap" data-p="${prog.id}" data-d="${d.id}" data-u="${sl.uid}">↺ Cambiar</button><button class="btn sm ghost" data-action="pt-del-ex" data-p="${prog.id}" data-d="${d.id}" data-u="${sl.uid}">✕</button></div></div>`; }).join("")}
     </section>`).join("");
   return `<div class="prog-head"><div><h2 class="prog-name">${esc(prog.nombre)}</h2><p class="hint">${prog.diasSem} días/sem (${PT_SCHED[prog.diasSem]||""}) · ${prog.semanas} semanas · ≈ ${prog.minutos} min por sesión · desde ${fmtCorto(prog.inicio)}</p></div>
-    <div class="acts"><button class="btn sm" data-action="pt-copiar-prog" data-id="${prog.id}">⧉ Copiar para WhatsApp</button><button class="btn sm" data-action="pt-print-prog" data-id="${prog.id}">⎙ Imprimir / PDF</button>
+    <div class="acts"><button class="btn sm" data-action="pt-copiar-prog" data-id="${prog.id}">⧉ Copiar para WhatsApp</button><button class="btn sm primary" data-action="pt-pdf-rutina" data-id="${prog.id}">⬇ Descargar PDF</button><button class="btn sm" data-action="pt-print-prog" data-id="${prog.id}">⎙ Imprimir</button>
     ${c?`<button class="btn sm" data-action="pt-gen" data-id="${c.id}">↻ Nuevo programa</button>`:""}</div></div>
     <div class="phase-card ph-${f.k}"><div class="pager"><button class="pg" data-action="pt-sem" data-d="-1" ${w<=1?"disabled":""} aria-label="Semana anterior">←</button><b>Semana ${w} de ${prog.semanas}</b><button class="pg" data-action="pt-sem" data-d="1" ${w>=prog.semanas?"disabled":""} aria-label="Semana siguiente">→</button></div>
       <div class="ph-body"><span class="chip ph">${esc(f.nom)}</span><span class="hint">${esc(f.desc)}</span></div></div>
     <div class="vol-row"><span class="mini-lbl">Series directas por semana</span><div class="vols">${volH}</div><p class="hint">Verde: dentro del rango recomendado para su nivel · ámbar: bajo o alto. Los básicos también trabajan músculos secundarios.</p></div>
-    <div class="sections">${dias}</div>`;
+    <div class="sections">${dias}</div>${ptCardioHtml(prog,c,w)}`;
 }
 function ptTabSesion(c){
   const prog=ptProgActivo(c.id), S=PTUI.ses;
@@ -433,6 +436,7 @@ function ptPrintHtml(prog,c){
 function fv(id){ const el=document.getElementById(id); return el?el.value:""; }
 function ptSel(id,opts,cur){ return `<select class="inp" id="${id}">${opts.map(([v,l])=>`<option value="${v}" ${String(cur)===String(v)?"selected":""}>${esc(l)}</option>`).join("")}</select>`; }
 function ptModal(md){
+  { const h3=ptModal3(md); if(h3) return h3; }
   if(md.type==="pt-cliente"){
     const c=md.data, nv=Object.keys(PT_NIVELES).map(k=>[k,PT_NIVELES[k].nom]), ob=Object.keys(PT_OBJETIVOS).map(k=>[k,PT_OBJETIVOS[k].nom]), eq=Object.keys(PT_EQUIPO).map(k=>[k,PT_EQUIPO[k].nom]);
     return modalShell(md.id?"Editar cliente":"Nuevo cliente",`<div class="form-grid">
@@ -454,12 +458,14 @@ function ptModal(md){
   if(md.type==="pt-gen"){
     const g=md.data, nv=Object.keys(PT_NIVELES).map(k=>[k,PT_NIVELES[k].nom+" — "+PT_NIVELES[k].desc]), ob=Object.keys(PT_OBJETIVOS).map(k=>[k,PT_OBJETIVOS[k].nom+" — "+PT_OBJETIVOS[k].desc]), eq=Object.keys(PT_EQUIPO).map(k=>[k,PT_EQUIPO[k].nom]);
     return modalShell("Generar programa",`<div class="form-grid">
+      <div class="full"><label class="mini">Estilo de entrenamiento</label><select class="inp" id="pg-estilo" data-action="pt-estilo">${Object.keys(PT_ESTILOS).map(k=>`<option value="${k}" ${(g.estilo||"auto")===k?"selected":""}>${esc(PT_ESTILOS[k].nom)}</option>`).join("")}</select><p class="hint" id="pg-estilo-hint" style="margin:4px 0 0">${esc(PT_ESTILOS[g.estilo||"auto"].quien)}</p></div>
       <div class="full"><label class="mini">Nivel</label>${ptSel("pg-nivel",nv,g.nivel)}</div>
       <div class="full"><label class="mini">Objetivo</label>${ptSel("pg-objetivo",ob,g.objetivo)}</div>
       <div><label class="mini">Días por semana</label>${ptSel("pg-dias",[2,3,4,5,6].map(n=>[n,n+" días"]),g.dias)}</div>
       <div><label class="mini">Duración del programa</label>${ptSel("pg-semanas",[4,6,8,12].map(n=>[n,n+" semanas"]),g.semanas)}</div>
       <div><label class="mini">Tiempo por sesión</label>${ptSel("pg-min",[45,60,75].map(n=>[n,n+" min"]),g.minutos)}</div>
       <div><label class="mini">Material</label>${ptSel("pg-equipo",eq,g.equipo)}</div>
+      <div><label class="mini">Cardio</label>${ptSel("pg-cardio",[["auto","Incluido (según objetivo)"],["mas","Más cardio (+1 sesión)"],["no","Sin cardio"]],g.cardio||"auto")}</div>
       <div class="full"><label class="mini">Evitar por lesión</label><div class="chk-row">${PT_ZONAS.map(([k,l])=>`<label class="fb-check"><input type="checkbox" id="pg-z-${k}" ${(g.lesiones||[]).includes(k)?"checked":""}>${l}</label>`).join("")}</div></div></div>
       <p class="hint" style="margin-top:12px">El programa nuevo reemplaza al activo (queda archivado). Básico: máx. 4 días. Avanzado: mín. 3.</p>`,
       `<button class="btn ghost" data-action="close-modal">Cancelar</button><button class="btn primary" data-action="pt-gen-ok">Generar</button>`);
@@ -533,13 +539,14 @@ function ptGuardarSesion(){
 function ptSwapEx(progId,diaId,uid,exId){
   { const _p=PT_D().programas.find(p=>p.id===progId), _d=_p&&_p.dias.find(x=>x.id===diaId), _o=_d&&_d.ejercicios.find(s=>s.uid===uid); if(_o){ aprPT("evita",_o.ex); aprPT("afin",exId); } }
   const prog=PT_D().programas.find(p=>p.id===progId), d=prog.dias.find(x=>x.id===diaId), i=d.ejercicios.findIndex(s=>s.uid===uid), old=d.ejercicios[i], e=PT_BY_ID[exId];
-  const tmp=ptSlot(e,old.rol,{nivel:prog.nivel,objetivo:prog.objetivo});
+  const tmp=ptSlot(e,old.rol,{nivel:prog.nivel,objetivo:prog.objetivo,estilo:prog.estilo});
   d.ejercicios[i]=Object.assign(tmp,{uid:old.uid,nota:old.nota});   // conserva la posición; la prescripción se ajusta al ejercicio nuevo
   touch();
 }
 function ptClick(a,t,ev){
   const D=PT_D();
   if(ptClick2(a,t)) return true;
+  if(ptClick3(a,t)) return true;
   if(a==="pt-open"){ ptOpen(t.dataset.id); return true; }
   if(a==="pt-back"){ PTUI.cid=null; PTUI.ses=null; state.screen="clientes"; render(); return true; }
   if(a==="pt-filtro"){ PTUI.filtro=t.dataset.v; render(); return true; }
@@ -553,7 +560,7 @@ function ptClick(a,t,ev){
     return true; }
   if(a==="pt-gen"){
     const c=ptCliente(t.dataset.id);
-    state.modal={type:"pt-gen",clienteId:c.id,data:{nivel:c.nivel,objetivo:c.objetivo,dias:c.dias,semanas:8,minutos:60,equipo:c.equipo,lesiones:c.lesiones||[]}}; renderOverlay(); return true; }
+    state.modal={type:"pt-gen",clienteId:c.id,data:{nivel:c.nivel,objetivo:c.objetivo,dias:c.dias,semanas:8,minutos:60,equipo:c.equipo,lesiones:c.lesiones||[],estilo:c.estilo||"auto"}}; renderOverlay(); return true; }
   if(a==="pt-gen-ok"){
     const md=state.modal, c=ptCliente(md.clienteId);
     const cfg={clienteId:c.id,nivel:fv("pg-nivel"),objetivo:fv("pg-objetivo"),dias:+fv("pg-dias"),semanas:+fv("pg-semanas"),minutos:+fv("pg-min"),equipo:fv("pg-equipo"),
@@ -617,6 +624,7 @@ function ptInput(a,t){
 function ptChange(a,t){
   if(a==="pt-ses-f"){ PTUI.ses[t.dataset.f]=t.value; return true; }
   if(a==="pt-graf"){ PTUI.graf=t.value; render(); return true; }
+  if(a==="pt-estilo"){ const h=document.getElementById("pg-estilo-hint"), nv=fv("pg-nivel"), d=+fv("pg-dias"), av=ptEstiloAviso(t.value,nv,d); if(h) h.textContent=PT_ESTILOS[t.value].quien+(av?" ⚠ "+av:""); return true; }
   if(a==="pt-addpat"){ PTUI.addPat=t.value; renderOverlay(); return true; }
   return false;
 }

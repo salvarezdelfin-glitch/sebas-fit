@@ -28,7 +28,7 @@ function emptyData(){
   return {app:2, savedAt:null,
     clases:{schedule:[],rates:{EUPHORIA:0,SOHO:0,EJE:0,ALUNNA_SOLO:0,ALUNNA_GROUP:0},payinfo:[],entries:[],cobros:[]},
     sf:{},
-    pt:{clientes:[],programas:[],sesiones:[],medidas:[],paquetes:[],pagos:[]},
+    pt:{clientes:[],programas:[],sesiones:[],medidas:[],paquetes:[],pagos:[],cardios:[],revisiones:[]},
     cot:{precios:null,cotizaciones:[],seq:0,cfg:{}},
     yo:{perfil:{},metas:{},base:{},plan:{},carreras:[],pesas:[],pesos:[],config:{}},
   };
@@ -45,7 +45,7 @@ function migrate(p){
   }
   d.savedAt=p.savedAt||null;
   ["schedule","payinfo","entries","cobros"].forEach(k=>{ if(!Array.isArray(d.clases[k])) d.clases[k]=[]; });
-  ["clientes","programas","sesiones","medidas","paquetes","pagos"].forEach(k=>{ if(!Array.isArray(d.pt[k])) d.pt[k]=[]; });
+  ["clientes","programas","sesiones","medidas","paquetes","pagos","cardios","revisiones"].forEach(k=>{ if(!Array.isArray(d.pt[k])) d.pt[k]=[]; });
   if(!Array.isArray(d.cot.cotizaciones)) d.cot.cotizaciones=[];
   if(!d.cot.cfg||typeof d.cot.cfg!=="object") d.cot.cfg={};
   ["perfil","metas","base","plan","config"].forEach(k=>{ if(!d.yo[k]||typeof d.yo[k]!=="object"||Array.isArray(d.yo[k])) d.yo[k]={}; });
@@ -56,7 +56,7 @@ function migrate(p){
 
 /* ---------- fusión: nunca perder registros entre dispositivos ---------- */
 const ID_ARRAYS=[["clases","schedule"],["clases","payinfo"],["clases","entries"],["clases","cobros"],
-  ["pt","clientes"],["pt","programas"],["pt","sesiones"],["pt","medidas"],["pt","paquetes"],["pt","pagos"],
+  ["pt","clientes"],["pt","programas"],["pt","sesiones"],["pt","medidas"],["pt","paquetes"],["pt","pagos"],["pt","cardios"],["pt","revisiones"],
   ["cot","cotizaciones"],["yo","carreras"],["yo","pesas"],["yo","pesos"],["sf","saved"],["sf","programas"],["sf","historial"],["sf","playlists"],["sf","musiclib"]];
 /* "newer" gana en conflictos; lo que solo existe en "older" se conserva */
 function mergeData(older,newer){

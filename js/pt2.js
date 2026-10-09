@@ -9,13 +9,14 @@ function ptFichaCampos(c){
   const n=(id,l,v,ph)=>`<div><label class="mini">${l}</label><input class="inp" id="${id}" type="number" inputmode="decimal" step="0.1" value="${v==null?"":v}" ${ph?`placeholder="${ph}"`:""}></div>`;
   return `<div class="full"><label class="mini" style="margin-top:6px">Punto de partida y metas (para proyectar el proceso)</label></div>
     <div><label class="mini">Sexo (afecta los ritmos de cambio)</label>${ptSel("pc-sexo",[["","Prefiero no decir"],["f","Mujer"],["m","Hombre"]],c.sexo||"")}</div>
-    ${n("pc-estatura","Estatura (cm)",c.estatura)}${n("pc-peso0","Peso actual (kg)",c.peso0)}${n("pc-grasa0","% de grasa actual",c.grasa0,"opcional")}
+    <div class="full"><label class="mini">Estilo de entrenamiento (la rutina se arma con esta división)</label>${ptSel("pc-estilo",Object.keys(PT_ESTILOS).map(k=>[k,PT_ESTILOS[k].nom]),c.estilo||"auto")}</div>
+    ${n("pc-edad","Edad (años)",c.edad)}${n("pc-estatura","Estatura (cm)",c.estatura)}${n("pc-peso0","Peso actual (kg)",c.peso0)}${n("pc-grasa0","% de grasa actual",c.grasa0,"opcional")}
     <div class="full"><label class="mini">Meta (con tus palabras)</label><input class="inp" id="pc-metaTexto" value="${esc(c.metaTexto||"")}" placeholder="ej. bajar a 22 % de grasa y marcar glúteo"></div>
     ${n("pc-metaPeso","Peso meta (kg)",c.metaPeso,"opcional")}${n("pc-metaGrasa","% de grasa meta",c.metaGrasa,"opcional")}`;
 }
 function ptFichaDesdeForm(c){
   const nv=id=>{ const v=fv(id); return v===""?"":Number(v); };
-  c.sexo=fv("pc-sexo"); c.estatura=nv("pc-estatura"); c.peso0=nv("pc-peso0"); c.grasa0=nv("pc-grasa0"); c.metaTexto=fv("pc-metaTexto").trim(); c.metaPeso=nv("pc-metaPeso"); c.metaGrasa=nv("pc-metaGrasa");
+  c.sexo=fv("pc-sexo"); c.estilo=fv("pc-estilo")||"auto"; c.edad=nv("pc-edad"); c.estatura=nv("pc-estatura"); c.peso0=nv("pc-peso0"); c.grasa0=nv("pc-grasa0"); c.metaTexto=fv("pc-metaTexto").trim(); c.metaPeso=nv("pc-metaPeso"); c.metaGrasa=nv("pc-metaGrasa");
   return c;
 }
 /* si el cliente trae peso, queda como primera medida (para las gráficas y la comparación) */
@@ -48,7 +49,7 @@ function ptTabProceso(c){
       <div class="hito-cols"><div><div class="mini-lbl">Lo que empieza a notar</div><ul>${h.notar.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div><div><div class="mini-lbl">Lo que medimos</div><ul>${h.medir.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div></div></section>`; }).join("");
   return `${tiles}${metaH}<div class="chart-grid" style="margin-top:14px"><section class="card"><h3>Peso: proyección y real</h3>${svgProy(pts,rPeso,"kg","peso",Number(c.metaPeso)||0)}<p class="hint">Línea punteada = proyección · puntos = medidas reales.</p></section>
     <section class="card"><h3>% de grasa: proyección y real</h3>${svgProy(pts,rGrasa,"%","grasa",Number(c.metaGrasa)||0)}</section></div>
-    <div class="acts-row" style="margin:6px 0 18px"><button class="btn" data-action="pt-pj-copiar" data-id="${c.id}">⧉ Copiar plan para WhatsApp</button><button class="btn" data-action="pt-pj-print" data-id="${c.id}">⎙ Imprimir / PDF</button><button class="btn" data-action="pt-med-nueva" data-id="${c.id}">+ Registrar medidas</button><button class="btn ghost" data-action="pt-editar" data-id="${c.id}">✎ Editar ficha</button></div>
+    <div class="acts-row" style="margin:6px 0 18px"><button class="btn" data-action="pt-pj-copiar" data-id="${c.id}">⧉ Copiar plan para WhatsApp</button><button class="btn primary" data-action="pt-pdf-informe" data-id="${c.id}">⬇ Informe de progreso (PDF)</button><button class="btn" data-action="pt-pj-print" data-id="${c.id}">⎙ Imprimir</button><button class="btn" data-action="pt-med-nueva" data-id="${c.id}">+ Registrar medidas</button><button class="btn ghost" data-action="pt-editar" data-id="${c.id}">✎ Editar ficha</button></div>
     <div class="hitos">${cards}</div><p class="hint" style="margin-bottom:40px">Estimaciones orientativas basadas en promedios para su nivel y objetivo; dependen de constancia, sueño, comida y genética. Cada hito se revisa con medidas reales y se ajusta el programa.</p>`;
 }
 
@@ -90,12 +91,13 @@ function ptClick2(a,t){
     D.programas.forEach(x=>{ if(x.clienteId===cl.id) x.activo=false; }); D.programas.push(copia); touch(); PTUI.cid=cl.id; PTUI.tab="programa"; PTUI.sem=1; state.screen="cliente"; render(); toast("Rutina asignada a "+cl.nombre.split(" ")[0]); return true; }
   if(a==="pt-gen-ok"){
     const md=state.modal, c=md.clienteId?ptCliente(md.clienteId):null;
-    const cfg={clienteId:c?c.id:null,nivel:fv("pg-nivel"),objetivo:fv("pg-objetivo"),dias:+fv("pg-dias"),semanas:+fv("pg-semanas"),minutos:+fv("pg-min"),equipo:fv("pg-equipo"),
+    const cfg={clienteId:c?c.id:null,nivel:fv("pg-nivel"),objetivo:fv("pg-objetivo"),dias:+fv("pg-dias"),semanas:+fv("pg-semanas"),minutos:+fv("pg-min"),equipo:fv("pg-equipo"),cardio:fv("pg-cardio")||"auto",estilo:fv("pg-estilo")||"auto",
       lesiones:PT_ZONAS.filter(([k])=>document.getElementById("pg-z-"+k).checked).map(([k])=>k)};
     if(c) D.programas.forEach(p=>{ if(p.clienteId===c.id) p.activo=false; });
     const prog=ptGenerar(cfg);
     if(c){ prog.nombre=PT_OBJETIVOS[cfg.objetivo].nom+" · "+PT_NIVELES[cfg.nivel].nom+" · "+c.nombre.split(" ")[0]; }
     else { prog.nombre=PT_OBJETIVOS[cfg.objetivo].nom+" · "+PT_NIVELES[cfg.nivel].nom+" · "+prog.diasSem+" días"; prog.activo=false; }
+    if(cfg.estilo&&cfg.estilo!=="auto") prog.nombre+=" · "+PT_ESTILOS[cfg.estilo].corto;
     D.programas.push(prog); touch(); closeModal();
     if(c){ PTUI.tab="programa"; PTUI.sem=1; render(); toast("Programa generado"); }
     else { PTUI.pid=prog.id; PTUI.sem=1; state.screen="plantilla"; render(); window.scrollTo(0,0); toast("Rutina generada"); }
