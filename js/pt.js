@@ -269,7 +269,6 @@ function svgBars(vals,labels,fmt,color){
 
 /* ---------- vistas ---------- */
 function viewClientes(){
-  if(PTUI.vista==="plantillas") return viewPlantillas();
   const L=PT_D().clientes, f=PTUI.filtro;
   const vis=L.filter(c=>f==="todos"||(f==="activos"?c.estado==="activo":f==="pausa"?c.estado==="pausa":c.estado==="archivado")).sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const cnt=k=>L.filter(c=>c.estado===k).length;
@@ -284,7 +283,7 @@ function viewClientes(){
     <header class="page-head"><span class="eyebrow">Personal trainer</span><h1>Clientes</h1><p class="sub">Programas por nivel, seguimiento de sesiones y progreso — presencial y rutina mandada.</p></header>
     ${ptVistaTabs()}
     <div class="toolbar"><div class="seg">${[["activos","Activos ("+cnt("activo")+")"],["pausa","En pausa ("+cnt("pausa")+")"],["archivado","Archivados ("+cnt("archivado")+")"],["todos","Todos"]].map(([k,l])=>`<button data-action="pt-filtro" data-v="${k}" class="${f===k?"on":""}">${l}</button>`).join("")}</div>
-      <span class="spacer"></span><button class="btn primary" data-action="pt-nuevo">+ Nuevo cliente</button></div>
+      <span class="spacer"></span><button class="btn" data-action="go" data-screen="gym">🏋 Rutinas de gym</button><button class="btn primary" data-action="pt-nuevo">+ Nuevo cliente</button></div>
     ${cards?`<div class="cli-grid">${cards}</div>`:`<div class="empty"><b>Aún no hay clientes${f!=="todos"?" en esta vista":""}.</b><p>Crea el primero con "Nuevo cliente" — o desde una cotización aceptada.</p></div>`}
   </div>`;
 }

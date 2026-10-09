@@ -3,7 +3,7 @@
    MAIN · Sebas Fit — navegación, ajustes, acceso y arranque
    ============================================================ */
 const NAV=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio","planner","armar","formato","playlists","guardadas"],"inicio"],
-  ["clientes","Clientes",["clientes","cliente","plantilla"],"clientes"],["cotizador","Cotizador",["cotizador"],"cotizador"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
+  ["clientes","Clientes",["clientes","cliente"],"clientes"],["gym","Gym",["gym","plantilla"],"gym"],["cotizador","Cotizador",["cotizador"],"cotizador"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
 const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["formato","Mi formato"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
 
 /* ---------- utilidades de interfaz ---------- */
@@ -62,6 +62,7 @@ function render(){
   else if(s==="playlists") h=subnavHtml()+viewPlaylists();
   else if(s==="guardadas") h=subnavHtml()+viewGuardadas();
   else if(s==="clientes") h=viewClientes();
+  else if(s==="gym") h=viewPlantillas();
   else if(s==="cliente") h=viewCliente();
   else if(s==="plantilla") h=viewPlantilla();
   else if(s==="cotizador") h=viewCotizador();

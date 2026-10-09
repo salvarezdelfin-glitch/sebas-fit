@@ -54,7 +54,7 @@ function ptTabProceso(c){
 
 /* ---------- rutinas de gimnasio (sin cliente) ---------- */
 function ptVistaTabs(){
-  return `<div class="tabs"><button data-action="pt-vista" data-v="clientes" class="${PTUI.vista!=="plantillas"?"on":""}">Clientes</button><button data-action="pt-vista" data-v="plantillas" class="${PTUI.vista==="plantillas"?"on":""}">Rutinas de gimnasio</button></div>`;
+  return `<div class="tabs"><button data-action="pt-vista" data-v="clientes" class="${state.screen!=="gym"?"on":""}">Clientes</button><button data-action="pt-vista" data-v="plantillas" class="${state.screen==="gym"?"on":""}">Rutinas de gimnasio</button></div>`;
 }
 const ptPlantillas=()=>PT_D().programas.filter(p=>!p.clienteId);
 function viewPlantillas(){
@@ -67,7 +67,7 @@ function viewPlantillas(){
 }
 function viewPlantilla(){
   const prog=PT_D().programas.find(p=>p.id===PTUI.pid);
-  if(!prog){ PTUI.vista="plantillas"; state.screen="clientes"; return viewPlantillas(); }
+  if(!prog){ state.screen="gym"; return viewPlantillas(); }
   const act=PT_D().clientes.filter(c=>c.estado==="activo").sort((a,b)=>a.nombre.localeCompare(b.nombre));
   return `<div class="wrap"><div class="back-row"><button class="btn sm ghost" data-action="pt-pl-back">← Rutinas de gimnasio</button></div>
     <header class="page-head"><span class="eyebrow">Rutina de gimnasio · ${PT_NIVELES[prog.nivel].nom}</span><h1>${esc(prog.nombre)}</h1></header>
@@ -79,11 +79,11 @@ function viewPlantilla(){
 /* ---------- acciones ---------- */
 function ptClick2(a,t){
   const D=PT_D();
-  if(a==="pt-vista"){ PTUI.vista=t.dataset.v; render(); return true; }
+  if(a==="pt-vista"){ state.screen=t.dataset.v==="plantillas"?"gym":"clientes"; render(); return true; }
   if(a==="pt-pl-open"){ PTUI.pid=t.dataset.id; PTUI.sem=1; state.screen="plantilla"; render(); window.scrollTo(0,0); return true; }
-  if(a==="pt-pl-back"){ PTUI.vista="plantillas"; state.screen="clientes"; render(); return true; }
+  if(a==="pt-pl-back"){ state.screen="gym"; render(); return true; }
   if(a==="pt-gen-plantilla"){ state.modal={type:"pt-gen",clienteId:null,data:{nivel:"intermedio",objetivo:"hipertrofia",dias:4,semanas:8,minutos:60,equipo:"gym",lesiones:[]}}; renderOverlay(); return true; }
-  if(a==="pt-pl-del"){ const L=D.programas, i=L.findIndex(p=>p.id===t.dataset.id); if(i<0) return true; const [p]=L.splice(i,1); touch(); PTUI.vista="plantillas"; state.screen="clientes"; render(); toastUndo("Rutina eliminada",()=>{ L.splice(Math.min(i,L.length),0,p); touch(); render(); }); return true; }
+  if(a==="pt-pl-del"){ const L=D.programas, i=L.findIndex(p=>p.id===t.dataset.id); if(i<0) return true; const [p]=L.splice(i,1); touch(); state.screen="gym"; render(); toastUndo("Rutina eliminada",()=>{ L.splice(Math.min(i,L.length),0,p); touch(); render(); }); return true; }
   if(a==="pt-asignar"){
     const p=D.programas.find(x=>x.id===t.dataset.p), cid=fv("pt-asig"), cl=ptCliente(cid); if(!p||!cl) return true;
     const copia=clone(p); copia.id=newId("pg"); copia.clienteId=cl.id; copia.activo=true; copia.inicio=todayStr(); copia.nombre=p.nombre+" · "+cl.nombre.split(" ")[0]; copia.creado=nowISO();
