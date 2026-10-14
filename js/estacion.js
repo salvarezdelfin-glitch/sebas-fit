@@ -283,7 +283,8 @@ function estBloque(kind,idx,ctx,used){
     sec.anchor=An.id;
   } else if(kind==="glu"){
     const anchors=Object.values(EST_ANCHORS).filter(a=>a.blk==="glu"&&!used.has(a.id));
-    const A=estPick(anchors.map(a=>({id:a.id})),size==="L"?2:1);
+    let A=estPick(anchors.map(a=>({id:a.id})),size==="L"?2:1);
+    { const a0=EST_ANCHORS[A[0].id]; if(A.length<2&&!a0.lados&&a0.layers.length<5){ const otras=anchors.filter(x=>x.id!==a0.id); if(otras.length) A=A.concat(estPick(otras.map(x=>({id:x.id})),1)); } }   // un glúteo sin lados queda corto: se suma otra estación
     A.forEach(x=>{ const An=EST_ANCHORS[x.id]; used.add(An.id); const L=An.layers.map(i=>byId[i]);
       if(An.lados){ L.forEach(s=>add(s,"A")); L.forEach(s=>add(s,"B")); } else L.forEach(s=>add(s)); ctx.eq.add(An.eq); });
     const An0=EST_ANCHORS[A[0].id]; sec.nom="Bloque "+idx+" · Glúteo ("+An0.anchorNom.toLowerCase()+")"; sec.anchor=An0.id;
@@ -322,6 +323,7 @@ function generateEstacion(cfg){
   const r={id:rid(),metodo:"sculpt",estilo:"estacion",nombre:`Sculpt · ${mode.nom} · ${cfg.duracion} min`,modo:cfg.modo,nivel:dif,duracion:cfg.duracion,base,porBloque:null,
     vueltas:1,rest:"una pasada por estación",sections,creada:Date.now(),material:[...ctx.eq]};
   estTransiciones(r);
+  if(typeof estAjustarDuracion==="function") estAjustarDuracion(r,cfg);   // llega a la duración pedida
   return r;
 }
 /* transiciones: lo que cuenta la instructora al pasar de un paso a otro */

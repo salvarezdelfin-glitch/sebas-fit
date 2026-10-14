@@ -407,3 +407,26 @@ button,input,select,textarea,a{touch-action:manipulation}
 /* ---------- cardio y seguimiento de clientes ---------- */
 .pc-row{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--hairline-soft)} .pc-row ul{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--ink-dim)} .pc-row small{color:var(--muted)}
 .rec-row{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap} .rec-row>span{flex:1 1 260px}
+
+/* ---------- calidad de la clase ---------- */
+.cal-card{background:var(--surface);border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:14px 18px;margin:0 0 14px}
+.cal-top{display:flex;gap:14px;align-items:center} .cal-top>div:last-child{flex:1}
+.cal-score{display:flex;align-items:baseline;gap:2px;font-family:var(--f-display);color:var(--c)} .cal-score b{font-size:38px;line-height:1} .cal-score small{font-size:13px;color:var(--muted)}
+.cal-bar{height:7px;border-radius:99px;background:var(--hairline-soft);overflow:hidden;margin-top:6px} .cal-bar i{display:block;height:100%}
+.cal-notes{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px} .cal-n{font-size:12.5px;padding:3px 10px;border-radius:99px;border:1px solid var(--hairline)} .cal-n.warn{color:var(--warn,#e3ab52);border-color:rgba(227,171,82,.45)} .cal-n.ok{color:var(--ok,#7fb77e);border-color:rgba(127,183,126,.4)}
+
+/* ---------- guion y música de la clase ---------- */
+.mu-linea{margin:0 0 16px} .mu-lh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px}
+.mu-bar{display:flex;gap:2px;height:30px;border-radius:8px;overflow:hidden} .mu-bar i{display:flex;align-items:center;justify-content:center;min-width:2px;overflow:hidden;font-style:normal} .mu-bar i span{font-size:10.5px;font-family:var(--f-mono);color:#0b0b0c;white-space:nowrap;padding:0 4px;opacity:.85}
+.mu-bar-s{height:12px;margin-top:5px} .mu-bar-s i.a{background:var(--accent)} .mu-bar-s i.b{background:var(--accent);opacity:.55}
+.mu-track .idx{font-family:var(--f-mono);font-size:11px;color:var(--muted);min-width:38px}
+.iv-music{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow:hidden;padding:6px 14px;border-bottom:1px solid var(--hairline-soft);background:var(--surface);font-size:12.5px;flex:none}
+.iv-music .spacer{display:none} .iv-mt{color:var(--ink-dim);min-width:0;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .iv-mt b{color:var(--ink)} .iv-mbtn,.iv-plan{flex:none}
+@media (max-width:760px){ .iv-sig{display:none} .iv-music{flex-wrap:wrap;padding:6px 12px} .iv-mt{flex:1 0 100%} .iv-music .spacer{display:block;flex:1} }
+.iv-stage{justify-content:flex-start!important;overflow-y:auto} .iv-stage::before,.iv-stage::after{content:"";flex:0 0 0;margin:auto}
+.iv-mbtn{background:var(--raised,var(--surface));border:1px solid var(--hairline);border-radius:8px;padding:5px 10px;font-size:12.5px;color:var(--ink-dim);text-decoration:none;display:inline-flex;align-items:center}
+.iv-mbtn.go,.iv-mbtn.on{border-color:var(--accent);color:var(--accent)}
+.iv-plan{font-family:var(--f-mono);font-size:11.5px;padding:3px 8px;border-radius:99px;border:1px solid var(--hairline)} .iv-plan.ok{color:var(--ok,#7fb77e)} .iv-plan.late{color:#e07a5f;border-color:#e07a5f} .iv-plan.early{color:#7fb7e0}
+
+.cue.opc{font-size:12px;color:var(--muted);margin-top:2px}
+.iv-opc{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:center;font-size:12.5px;color:var(--muted);margin-top:2px} .iv-opc span:first-child{color:#7fb7e0} .iv-opc span:last-child{color:#e0a37f}

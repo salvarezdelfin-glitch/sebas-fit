@@ -373,7 +373,7 @@ function makeState(){
   cfg:{
     metodo:"sculpt",
     estilo:"estacion", modo:"full", nivel:"media", duracion:45, base:8, porBloque:6,
-    fModo:"full", objetivo:"media", fPorBloque:4, fDuracion:55, descanso:60,
+    fModo:"full", objetivo:"media", fPorBloque:"auto", fDuracion:55, descanso:60,
     bModo:"full", bDificultad:"media", bBase:8, bPorBloque:5, bDuracion:50,
     calent:true, enfr:true,
   },
@@ -445,7 +445,7 @@ function registrarFeedback(routine,energia,malos,favorito,notaMusica,notaLibre){
 /* ---- programa de progresión semanal ---- */
 function resumenCfg(c){
   if(c.metodo==="sculpt") return `${nivelOf(c.nivel).nom} · ${c.porBloque}/bloque`;
-  if(c.metodo==="fuerza") return `${objetivoOf(c.objetivo).nom} · ${c.fPorBloque}/bloque`;
+  if(c.metodo==="fuerza") return `${objetivoOf(c.objetivo).nom} · ${c.fPorBloque==="auto"?"ajustada a la duración":c.fPorBloque+"/bloque"}`;
   return `${barreDifOf(c.bDificultad).nom} · ${c.bBase} cuentas`;
 }
 function stepProgramCfg(base,i,total){
@@ -459,7 +459,7 @@ function stepProgramCfg(base,i,total){
     const orden=["ligera","media","pesada","muypesada"];
     c.objetivo=orden[Math.min(3,Math.round(t*3))];
     c.descanso=objetivoOf(c.objetivo).descanso;
-    c.fPorBloque=Math.max(3,Math.min(4,3+Math.round(t)));
+    c.fPorBloque="auto";
   } else if(c.metodo==="barre"){
     const orden=["ligera","media","pesada","muypesada"];
     c.bDificultad=orden[Math.min(3,Math.round(t*3))];
@@ -602,6 +602,7 @@ function pickFuerza(key,count,used){
   return chosen;
 }
 function generateFuerza(cfg){
+  if(typeof generateFuerza2==="function") return generateFuerza2(cfg);   // motor nuevo: principal + secundario + accesorio, ajustado a la duración
   const mode=MODES.fuerza[cfg.fModo];
   const per=cfg.fPorBloque||3, ob=objetivoOf(cfg.objetivo);
   const descanso=cfg.descanso||ob.descanso;
@@ -670,10 +671,16 @@ function _generate(cfg){
   return generateSculpt(cfg);
 }
 function generate(cfg){
-  let r, t=0;
-  do { r=_generate(cfg); t++; } while(t<7 && state.historia.sigs.includes(routineSig(r)));
-  bumpHistoria(r);
-  return r;
+  // genera varias clases y se queda con la de mejor calidad (duración, material, variedad, estructura)
+  const N=(typeof claseCalidad==="function"&&cfg.metodo!=="barre")?10:1; let best=null, bs=-1;
+  for(let i=0;i<N;i++){
+    let r, t=0;
+    do { r=_generate(cfg); t++; } while(t<4 && state.historia.sigs.includes(routineSig(r)));
+    const sc=N>1?claseCalidad(r).score+Math.random()*0.4:0;
+    if(!best||sc>bs){ best=r; bs=sc; }
+  }
+  bumpHistoria(best);
+  return best;
 }
 
 function computeTransitions(sections,metodo,descanso){
@@ -717,13 +724,15 @@ function resolve(s){
     lado:s.lado!==undefined?s.lado:ex.lado,
     eq:s.eq||ex.eq, nota:s.nota||"", trans:s.trans||"",
     q:s.q||null, side:s.side||null,
+    ref:s.ref, sets:s.sets, rep:s.rep, rest:s.rest, rol:s.rol,
   };
 }
 function schemeText(rs,routine,kind){
   if(rs.q){ const t=estQTxt(rs.q); return {n:t.n,u:t.u,tempo:"",station:true,qt:rs.q.t}; }   // paso de estación: reps, hold, pulsos o a la falla
-  if(kind==="prep") return {n:"8–10",u:"reps de activación",tempo:""};
-  if(kind==="cool") return {n:"20–30",u:"s de sostén",tempo:""};
+  if(kind==="prep"){ const q=(typeof prepQ==="function")?prepQ(rs.ref,"prep"):null; return q?{n:q,u:"",tempo:""}:{n:"8–10",u:"reps de activación",tempo:""}; }
+  if(kind==="cool"){ const q=(typeof prepQ==="function")?prepQ(rs.ref,"cool"):null; return q?{n:q,u:"",tempo:""}:{n:"20–30",u:"s de sostén",tempo:""}; }
   if(routine.metodo==="fuerza" && (kind==="work")){
+    if(routine.v2){ const f=fSlot(rs,routine); return {n:`${f.sets} × ${f.rep}`,u:`reps · descanso ${f.rest} s`,tempo:rs.tempo?("tempo "+rs.tempo):"",strength:true,rol:f.rol}; }
     return {n:`${routine.series} × ${routine.rango}`,u:"reps",tempo:rs.tempo?("tempo "+rs.tempo):"",strength:true};
   }
   if(kind==="cardioFin"){
@@ -761,7 +770,7 @@ function sectionSeconds(S,r){
   if(S.kind==="finisher"){ let sec=15; S.slots.forEach(s=>{sec += (resolve(s).lado?2:1)*30 + 8;}); return sec; }
   if(r.metodo==="fuerza"){
     const mid=objetivoOf(r.objetivo).mid; let sec=0;
-    S.slots.forEach(s=>{ sec += r.series*(mid*3 + r.descanso) + 10; });
+    S.slots.forEach(s=>{ sec += r.v2?fzSlotSeg(s,r):(r.series*(mid*3 + r.descanso) + 10); });
     return sec;
   }
   if(r.metodo==="barre"){
@@ -774,7 +783,7 @@ function sectionSeconds(S,r){
 function estimateMinutes(r){
   let sec=0;
   r.sections.forEach(S=>{ sec += sectionSeconds(S,r); });
-  return Math.round(sec/60);
+  return Math.round(sec*(typeof claseRitmoFactor==="function"?claseRitmoFactor():1)/60);
 }
 
 /* ---- brief de playlist ---- */
@@ -972,17 +981,17 @@ function fuerzaParams(c){
   <div class="field">
     <label class="lbl"><span class="eyebrow">3 · Duración</span></label>
     <div class="opt-row">
-      ${[45,55,65].map(d=>`
+      ${[30,45,55,65].map(d=>`
         <button class="opt ${c.fDuracion===d?'on':''}" data-action="set-fdur" data-v="${d}">
-          <span class="t">${d} min</span><span class="d">${d===45?'directo':d===55?'estándar':'completa'}</span>
+          <span class="t">${d} min</span><span class="d">${d===30?'express':d===45?'directo':d===55?'estándar':'completa'}</span>
         </button>`).join("")}
     </div>
   </div>
   <div class="panel">
     <div class="field" style="gap:14px">
       <label class="lbl"><span class="eyebrow">Estructura</span></label>
-      <div class="seg">${[3,4,5].map(n=>`<button data-action="set-fporbloque" data-v="${n}" class="${c.fPorBloque===n?'on':''}">3 bloques × ${n}</button>`).join("")}</div>
-      <p class="hint">Fuerza va por patrón: <b>Empuje · Tracción · Tren inferior</b> (o Rodilla · Bisagra · Accesorio). Compuestos primero, ${ob.series} series por ejercicio.</p>
+      <div class="seg">${["auto",2,3,4,5].map(n=>`<button data-action="set-fporbloque" data-v="${n}" class="${String(c.fPorBloque)===String(n)?'on':''}">${n==="auto"?"Automático (según la duración)":"3 bloques × "+n}</button>`).join("")}</div>
+      <p class="hint">Fuerza va por patrón: <b>Empuje · Tracción · Tren inferior</b> (o Rodilla · Bisagra · Accesorio). Cada bloque: ejercicio <b>principal pesado</b>, <b>secundario</b> y <b>accesorio</b>, con series, repeticiones y descanso propios; el número de ejercicios se ajusta a la duración que elijas.</p>
       <label class="lbl" style="margin-top:4px"><span class="eyebrow" style="color:var(--muted)">Descanso entre series</span></label>
       <div class="seg">${[45,60,90,120].map(d=>`<button data-action="set-descanso" data-v="${d}" class="${c.descanso===d?'on':''}">${d} s</button>`).join("")}</div>
     </div>
@@ -1019,7 +1028,7 @@ function barreParams(c){
 function previewCounts(c){
   if(c.metodo==="fuerza"){
     const ob=objetivoOf(c.objetivo);
-    return `≈ <b>${c.fDuracion}</b> min · <b>${c.fPorBloque*3}</b> ejercicios · ${ob.series} series × ${ob.rango} · +cardio`;
+    return `≈ <b>${c.fDuracion}</b> min · ${c.fPorBloque==="auto"?"ejercicios según la duración":"<b>"+c.fPorBloque*3+"</b> ejercicios"} · principal ${ob.series} × ${ob.rango} · +cardio`;
   }
   if(c.metodo==="barre"){
     const nb=MODES.barre[c.bModo].secs.length;
@@ -1053,9 +1062,9 @@ function viewPlanner(){
             <span class="chip solid" style="color:${metodoColor(r.metodo)};border-color:${metodoColor(r.metodo)};background:transparent">${mode.nom}</span>
             ${esF?`
               <span class="chip">${objetivoOf(r.objetivo).nom}</span>
-              <span class="chip">${r.series} series</span>
-              <span class="chip">${nWork} × ${r.porBloque}</span>
-              <span class="chip">descanso ${r.descanso}s</span>
+              <span class="chip">${r.v2?'principal '+r.series+' × '+r.rango:r.series+' series'}</span>
+              <span class="chip">${r.v2?nWork+' bloques · '+r.sections.filter(s=>s.kind==="work").reduce((a,s)=>a+s.slots.length,0)+' ejercicios':nWork+' × '+r.porBloque}</span>
+              ${r.v2?'':`<span class="chip">descanso ${r.descanso}s</span>`}
             `:esB?`
               <span class="chip">${barreDifOf(r.bDificultad).nom}</span>
               <span class="chip">${nWork} bloques × ${r.porBloque}</span>
@@ -1080,6 +1089,7 @@ function viewPlanner(){
       </div>
     </header>
 
+    ${claseCalidadHtml(r)}
     ${musResumenHtml(r)}
 
     <div class="sections">
@@ -1090,10 +1100,11 @@ function viewPlanner(){
         <section class="sec">
           <div class="sec-head" style="--tagc:${tagc}">
             <h3>${esc(S.nom)}</h3>
-            <span class="s-meta">${S.slots.length} ${r.estilo==="estacion"?(S.slots.length===1?'paso':'pasos'):(S.slots.length===1?'ejercicio':'ejercicios')}${r.estilo==="estacion"?' · ≈ '+Math.max(1,Math.round(sectionSeconds(S,r)/60))+' min':isWork&&esF?' · '+r.series+' series':isWork&&esB?' · 2 vueltas':isWork?' · '+r.vueltas+'×'+r.base:''}</span>
+            <span class="s-meta">${S.slots.length} ${r.estilo==="estacion"?(S.slots.length===1?'paso':'pasos'):(S.slots.length===1?'ejercicio':'ejercicios')}${r.estilo==="estacion"?' · ≈ '+Math.max(1,Math.round(sectionSeconds(S,r)/60))+' min':isWork&&esF?(r.v2?' · ≈ '+Math.max(1,Math.round(sectionSeconds(S,r)/60))+' min':' · '+r.series+' series'):isWork&&esB?' · 2 vueltas':isWork?' · '+r.vueltas+'×'+r.base:''}</span>
             <span class="spacer"></span>
             <button class="btn sm" data-action="add-ex" data-sec="${S.id}">+ Añadir</button>
           </div>
+          ${S.carga?`<div class="mu-en">Carga sugerida: ${esc(S.carga)}</div>`:''}
           ${S.slots.map((s,i)=>{
             const rs=resolve(s); gi++;
             const sc=schemeText(rs,r,S.kind);
@@ -1109,12 +1120,13 @@ function viewPlanner(){
                 <div class="badges">
                   <span class="chip">${esc(rs.eq)}</span>
                   <span class="chip">${rs.pat==='iso'?'Isométrico':rs.pat==='pulsos'?'Pulsos':rs.pat==='tempo'?'Control de tempo':'Dinámico'}</span>
-                  ${byId[s.ref].comp&&esF?'<span class="chip solid">Compuesto</span>':''}
+                  ${esF&&s.rol?`<span class="chip solid">${FZ_ROL[s.rol]}</span>`:(byId[s.ref].comp&&esF?'<span class="chip solid">Compuesto</span>':'')}
                   ${rs.lado?'<span class="chip">Por lado</span>':''}${rs.side?`<span class="chip solid">Lado ${rs.side}</span>`:''}
                   ${!esF?`<span class="chip">${FLUJO_TXT[rs.f]}</span>`:''}
                 </div>
                 <div class="scheme"><span class="n">${sc.n}</span> ${sc.u}${sc.tempo?' · '+sc.tempo:''}${rs.lado&&!sc.strength?' · por lado':''}</div>
                 <div class="cue">${esc(rs.cue)}</div>
+                ${claseOpcHtml(rs)}
                 ${rs.nota?`<div class="cue" style="color:var(--accent)">✎ ${esc(rs.nota)}</div>`:''}
                 ${rs.trans?`<div class="trans ${s.restCue?'rest':''}">${esc(rs.trans)}</div>`:(esF||r.estilo==="estacion")?'':`<div class="trans" style="opacity:.55">sin pausa · enlaza</div>`}
               </div>
@@ -1350,14 +1362,14 @@ function modalTaste(){
    ============================================================ */
 function buildSteps(r){
   const steps=[];
-  r.sections.forEach(S=>S.slots.forEach(s=>steps.push({secNom:S.nom,tag:S.tag,kind:S.kind,protocolo:S.protocolo,slot:s})));
+  r.sections.forEach(S=>S.slots.forEach(s=>steps.push({secNom:S.nom,tag:S.tag,kind:S.kind,protocolo:S.protocolo,slot:s,carga:S.carga})));
   return steps;
 }
 function launchInstructor(){
   const r=state.routine, steps=buildSteps(r);
   if(steps.length===0)return;
   if(r.metodo==="fuerza"){
-    state.iv={metodo:"fuerza",steps,i:0,serie:1,phase:"idle",left:0,total:0,descanso:r.descanso,elapsed:0};
+    state.iv={metodo:"fuerza",steps,i:0,serie:1,phase:"idle",left:0,total:0,descanso:r.descanso,restAdj:0,elapsed:0}; state.iv.descanso=ivFRest();
   }else{
     const pl=playlistFor(r);
     state.iv={metodo:"sculpt",steps,i:0,set:0,running:false,elapsed:0,
@@ -1409,6 +1421,7 @@ function ivSculpt(){
     : `<button class="wide ${iv.running?'':'go'}" data-action="iv-toggle">${iv.running?'⏸ Pausa':'▶ Marcar '+(rs.q&&rs.q.n?rs.q.n:n)}</button>`;
   return `<div class="iv">
     ${ivShellTop(steps,iv.i,'· '+FLUJO_TXT[rs.f])}
+    ${ivMusicHtml()}
     <div class="iv-stage" data-action="iv-next-tap">
       <div class="iv-pulse">
         <div class="iv-ring" id="iv-ring" style="--beat:${60/iv.bpm}s">${ringTxt}</div>
@@ -1418,7 +1431,7 @@ function ivSculpt(){
       <div class="iv-sec"><span class="dot" style="background:${tagc}"></span><span>${esc(st.secNom)}</span></div>
       <h2 class="iv-name">${esc(rs.nom)}</h2>
       <div class="iv-badges">
-        <span class="chip">${esc(rs.eq)}</span>
+        <span class="chip">${esc(rs.eq)}</span>${st.carga?`<span class="chip">${esc(st.carga)}</span>`:''}
         <span class="chip">${rs.pat==='iso'?'Isométrico':rs.pat==='pulsos'?'Pulsos':rs.pat==='tempo'?'Tempo '+(rs.tempo||''):'Dinámico'}</span>
         ${rs.trans?`<span class="chip solid">${esc(rs.trans)}</span>`:''}
       </div>
@@ -1428,7 +1441,7 @@ function ivSculpt(){
         ${sideLabel?`<div class="iv-side">${sideLabel}</div>`:''}
       </div>
       ${n?`<div class="iv-nine" id="iv-nine">${Array.from({length:n},(_,k)=>`<i data-k="${k}"></i>`).join("")}</div>`:''}
-      <div class="iv-cue">${esc(rs.cue)}${rs.nota?` — <span style="color:var(--accent)">${esc(rs.nota)}</span>`:''}</div>
+      ${claseOpcIv(rs)}<div class="iv-cue">${esc(rs.cue)}${rs.nota?` — <span style="color:var(--accent)">${esc(rs.nota)}</span>`:''}</div>
     </div>
     ${ivNext(steps,iv.i,r)}
     <div class="iv-ctrl">
@@ -1451,7 +1464,7 @@ function ivFuerza(){
   const tagc=tagColor(st.tag);
   const isWork=st.kind==='work';
   const isCardio=st.kind==='cardioFin';
-  const series=r.series;
+  const fs=isWork?fSlot(st.slot,r):null, series=fs?fs.sets:r.series;
   let ringTxt, ringCls="", btnTxt, btnCls="go";
   if(iv.phase==="rest"||iv.phase==="work"){ ringTxt=iv.left; ringCls=iv.phase==="rest"?"rest":""; btnTxt="⏭ Saltar"; btnCls=""; }
   else if(isWork){ ringTxt="▶"; btnTxt=`Serie hecha ▸ descanso ${iv.descanso}s`; }
@@ -1460,6 +1473,7 @@ function ivFuerza(){
 
   return `<div class="iv">
     ${ivShellTop(steps,iv.i,isWork?'· serie '+iv.serie+'/'+series:'')}
+    ${ivMusicHtml()}
     <div class="iv-stage" data-action="iv-next-tap">
       <div class="iv-pulse">
         <div class="iv-ring ${ringCls}" id="iv-ring">${ringTxt}</div>
@@ -1469,8 +1483,8 @@ function ivFuerza(){
       <div class="iv-sec"><span class="dot" style="background:${tagc}"></span><span>${esc(st.secNom)}</span></div>
       <h2 class="iv-name">${esc(rs.nom)}</h2>
       <div class="iv-badges">
-        <span class="chip">${esc(rs.eq)}</span>
-        ${byId[st.slot.ref].comp?'<span class="chip solid">Compuesto</span>':''}
+        <span class="chip">${esc(rs.eq)}</span>${st.carga?`<span class="chip">${esc(st.carga)}</span>`:''}
+        ${fs&&fs.rol?`<span class="chip solid">${FZ_ROL[fs.rol]}</span>`:(byId[st.slot.ref].comp?'<span class="chip solid">Compuesto</span>':'')}
         ${rs.tempo?`<span class="chip">Tempo ${esc(rs.tempo)}</span>`:''}
         ${rs.lado?'<span class="chip">Por lado</span>':''}
       </div>
@@ -1478,7 +1492,8 @@ function ivFuerza(){
         <div class="iv-reps" style="font-size:clamp(34px,7vw,84px)">${sc.n}<span class="u">${sc.u}</span></div>
       </div>
       ${isWork?`<div class="iv-pills">${Array.from({length:series},(_,k)=>`<i class="${k+1<iv.serie?'done':k+1===iv.serie?'now':''}">${k+1}</i>`).join("")}</div>`:''}
-      <div class="iv-cue">${esc(rs.cue)}${rs.nota?` — <span style="color:var(--accent)">${esc(rs.nota)}</span>`:''}</div>
+      ${fs&&fs.rol?`<div class="iv-cue" style="opacity:.8">Carga: ${FZ_RIR[fs.rol]}</div>`:''}
+      ${claseOpcIv(rs)}<div class="iv-cue">${esc(rs.cue)}${rs.nota?` — <span style="color:var(--accent)">${esc(rs.nota)}</span>`:''}</div>
     </div>
     ${ivNext(steps,iv.i,r)}
     <div class="iv-ctrl">
@@ -1579,7 +1594,7 @@ function fAction(){
     return;
   }
   if(st.kind==="work"){
-    if(iv.serie>=state.routine.series){ ivGoto(1); return; }
+    if(iv.serie>=fSlot(st.slot,state.routine).sets){ ivGoto(1); return; }
     iv.serie++;
     fRun(iv.descanso,"rest",()=>{ iv.phase="idle"; renderOverlay(); });
   } else if(st.kind==="cardioFin"){
@@ -1588,7 +1603,7 @@ function fAction(){
     ivGoto(1);
   }
 }
-function changeRest(d){ const iv=state.iv; if(!iv)return; iv.descanso=Math.max(15,Math.min(240,iv.descanso+d));
+function changeRest(d){ const iv=state.iv; if(!iv)return; iv.restAdj=(iv.restAdj||0)+d; iv.descanso=Math.max(15,Math.min(240,iv.descanso+d));
   const b=document.querySelector('[data-action="iv-f-action"]'); if(b&&iv.phase==="idle")b.textContent=`Serie hecha ▸ descanso ${iv.descanso}s`; }
 
 /* ---- navegación instructor ---- */
@@ -1596,14 +1611,15 @@ function ivGoto(delta){
   const iv=state.iv, ni=iv.i+delta;
   if(ni<0||ni>=iv.steps.length)return;
   if(iv.metodo==="sculpt"){ stopMetro(); ivHoldStop(); } else {fClearTimer();iv.phase="idle";iv.serie=1;}
-  iv.i=ni; iv.set=0;
+  iv.i=ni; iv.set=0; if(iv.metodo==="fuerza") iv.descanso=ivFRest(); if(ni===iv.steps.length-1&&!iv.finT) iv.finT=iv.elapsed;
   renderOverlay();
 }
 function ivExit(){
+  if(typeof claseAlSalir==="function") claseAlSalir();
   if(state.iv&&state.iv.metodo==="sculpt"){ stopMetro(); ivHoldStop(); } fClearTimer();
   clearInterval(clockTimer);clockTimer=null; try{ if(state.iv&&state.iv.wl) state.iv.wl.release(); }catch(e){} state.iv=null; renderOverlay();
 }
-function ivClockTick(){ const iv=state.iv; if(!iv)return; iv.elapsed++;
+function ivClockTick(){ const iv=state.iv; if(!iv)return; iv.elapsed++; if(typeof ivMusicTick==="function") ivMusicTick();
   const el=document.getElementById("iv-clock"); if(el)el.textContent=fmtClock(iv.elapsed); }
 function bindInstructor(){ if(!clockTimer)clockTimer=setInterval(ivClockTick,1000); if(state.iv.metodo==="sculpt")syncSculptBtn(); }
 
@@ -1629,7 +1645,7 @@ document.addEventListener("click",e=>{
   if(a==="set-porbloque"){ c.porBloque=Number(t.dataset.v); render(); return; }
   if(a==="set-objetivo"){ c.objetivo=t.dataset.v; c.descanso=OBJETIVOS[t.dataset.v].descanso; render(); return; }
   if(a==="set-fdur"){ c.fDuracion=Number(t.dataset.v); render(); return; }
-  if(a==="set-fporbloque"){ c.fPorBloque=Number(t.dataset.v); render(); return; }
+  if(a==="set-fporbloque"){ c.fPorBloque=t.dataset.v==="auto"?"auto":Number(t.dataset.v); render(); return; }
   if(a==="set-descanso"){ c.descanso=Number(t.dataset.v); render(); return; }
   if(a==="taste-add"){ state.modal={type:"taste"}; renderOverlay(); return; }
   if(a==="taste-del"){ state.gustos.splice(Number(t.dataset.i),1); LS.set("sf_gustos",state.gustos); render(); return; }
@@ -1699,7 +1715,7 @@ document.addEventListener("click",e=>{
     if(!w)return;
     state.routine=deepClone(w.routine); state.routine.id=rid();
     const cf=state.cfg; cf.metodo=w.routine.metodo;
-    if(w.routine.metodo==='fuerza'){ cf.fModo=w.routine.fModo;cf.objetivo=w.routine.objetivo;cf.fDuracion=w.routine.duracion;cf.fPorBloque=w.routine.porBloque;cf.descanso=w.routine.descanso; }
+    if(w.routine.metodo==='fuerza'){ cf.fModo=w.routine.fModo;cf.objetivo=w.routine.objetivo;cf.fDuracion=w.routine.duracion;cf.fPorBloque=w.routine.v2?"auto":w.routine.porBloque;cf.descanso=w.routine.descanso; }
     else if(w.routine.metodo==='barre'){ cf.bModo=w.routine.bModo;cf.bDificultad=w.routine.bDificultad||"media";cf.bBase=w.routine.base;cf.bPorBloque=w.routine.porBloque;cf.bDuracion=w.routine.duracion; }
     else { cf.estilo=w.routine.estilo||"lista";cf.modo=w.routine.modo;cf.nivel=w.routine.nivel;cf.duracion=w.routine.duracion;cf.base=w.routine.base;if(w.routine.porBloque)cf.porBloque=w.routine.porBloque; }
     state.screen='planner'; render(); window.scrollTo(0,0);
@@ -1776,7 +1792,7 @@ function swapSlot(secId,u){
   if(S.kind==="prep")pool=LIB.filter(e=>e.b==="prep");
   else if(S.kind==="cool")pool=LIB.filter(e=>e.b==="cool");
   else if(S.kind==="cardioFin")pool=LIB.filter(e=>e.b==="cardio");
-  else if(r.metodo==="fuerza"){ const sd=secDef(MODES.fuerza[r.fModo].secs,S); pool=sd?fuerzaPool(sd.key):[]; }
+  else if(r.metodo==="fuerza"){ const sd=secDef(MODES.fuerza[r.fModo].secs,S); pool=sd?(r.v2&&s.rol?fzTodos(fzRolPools(sd.key,r.fModo)[s.rol]):fuerzaPool(sd.key)):[]; }
   else if(r.metodo==="barre"){ const sd=secDef(MODES.barre[r.bModo].secs,S); pool=sd?barrePool(sd.sub,new Set()):LIB.filter(e=>e.b==="barre"); }
   else { const sd=secDef(MODES.sculpt[r.modo].secs,S); pool=sd?sculptPool(sd,new Set()):LIB.filter(e=>e.b===byId[s.ref].b); }
   const inUse=new Set(r.sections.flatMap(x=>x.slots.map(z=>z.ref)));
@@ -1784,10 +1800,12 @@ function swapSlot(secId,u){
   let cand=shuffle(pool).find(e=>!inUse.has(e.id)) || shuffle(pool).find(e=>e.id!==s.ref);
   if(!cand)return;
   const i=S.slots.findIndex(x=>x.uid===u); const old=S.slots[i]; if(r.estilo==="estacion") aprSenal("cambio",old.ref,cand.id);
-  S.slots[i]=(cand.q&&r.estilo==="estacion")?estSlot(cand,{base:r.base||8,dif:r.nivel},old.side):slot(cand); reTrans(); render();
+  S.slots[i]=(cand.q&&r.estilo==="estacion")?estSlot(cand,{base:r.base||8,dif:r.nivel},old.side):slot(cand);
+  if(r.v2&&old.rol) Object.assign(S.slots[i],{rol:old.rol,sets:old.sets,rep:old.rep,rest:old.rest}); reTrans(); render();
 }
 function addPicked(secId,exId){ const r=state.routine, S=r.sections.find(x=>x.id===secId), ex=byId[exId]; if(r.estilo==="estacion") aprSenal("agrego",exId);
-  S.slots.push(ex.q&&r.estilo==="estacion"?estSlot(ex,{base:r.base||8,dif:r.nivel}):slot(ex)); reTrans(); closeModal(); render(); }
+  const nx=ex.q&&r.estilo==="estacion"?estSlot(ex,{base:r.base||8,dif:r.nivel}):slot(ex); if(r.v2&&r.metodo==="fuerza"&&S.kind==="work") Object.assign(nx,fzDefecto(r));
+  S.slots.push(nx); reTrans(); closeModal(); render(); }
 function setSlotField(f,v,silent){ const md=state.modal, {s}=findSlot(md.sec,md.uid); if(!s)return; s[f]=v; if(!silent)renderOverlay(); }
 function recomputeAndRender(){ reTrans(); render(); }
 function closeModal(){ state.modal=null; renderOverlay(); }
@@ -1822,7 +1840,7 @@ function loadSaved(id){
   const r=state.saved.find(x=>x.id===id); if(!r)return;
   state.routine=deepClone(r); state.routine.id=rid();
   const c=state.cfg; c.metodo=r.metodo;
-  if(r.metodo==="fuerza"){ c.fModo=r.fModo;c.objetivo=r.objetivo;c.fDuracion=r.duracion;c.fPorBloque=r.porBloque;c.descanso=r.descanso; }
+  if(r.metodo==="fuerza"){ c.fModo=r.fModo;c.objetivo=r.objetivo;c.fDuracion=r.duracion;c.fPorBloque=r.v2?"auto":r.porBloque;c.descanso=r.descanso; }
   else if(r.metodo==="barre"){ c.bModo=r.bModo;c.bDificultad=r.bDificultad||"media";c.bBase=r.base;c.bPorBloque=r.porBloque;c.bDuracion=r.duracion; }
   else { c.estilo=r.estilo||"lista";c.modo=r.modo;c.nivel=r.nivel;c.duracion=r.duracion;c.base=r.base;if(r.porBloque)c.porBloque=r.porBloque; }
   state.screen="planner"; render(); window.scrollTo(0,0);
@@ -1834,12 +1852,13 @@ function routineText(r,incluirPlaylist){
   const est=estimateMinutes(r);
   const nWork=r.sections.filter(s=>s.kind==="work").length;
   let out=`${r.nombre}\n`;
-  out+= esF ? `${objetivoOf(r.objetivo).nom} · ${r.series} series · descanso ${r.descanso}s · ~${est} min reales\n`
+  out+= esF ? (r.v2?`${objetivoOf(r.objetivo).nom} · ${nWork} bloques · principal ${r.series} × ${r.rango} · ~${est} min`:`${objetivoOf(r.objetivo).nom} · ${r.series} series · descanso ${r.descanso}s · ~${est} min reales`)+`\n`
        : esB ? `${barreDifOf(r.bDificultad).nom} · ${nWork} bloques × ${r.porBloque} · pulsos y sostenes en cuentas de ${r.base} · ~${est} min reales\nClase fluida: encadena sin pausa, de pie → piso. La barra la hace el cubo o la pared. Termina estirando.\n`
        : r.estilo==="estacion" ? `${nivelOf(r.nivel).nom} · ${nWork} estaciones + reto final · base ${r.base} · ~${est} min\n${(r.material&&r.material.length)?"Material: "+r.material.join(", ")+"\n":""}`
        : `${nivelOf(r.nivel).nom} · ${nWork} bloques × ${r.porBloque} · ${r.vueltas} vueltas · base ${r.base} · ~${est} min reales\nClase fluida: de pie → piso, sin volver a subir. Termina en el mat.\n`;
   r.sections.forEach(S=>{
     out+=`\n${S.nom.toUpperCase()}\n`;
+    if(S.carga) out+=`Carga sugerida: ${S.carga}\n`;
     S.slots.forEach((s,i)=>{
       const rs=resolve(s), sc=schemeText(rs,r,S.kind);
       out+=`${String(i+1).padStart(2)}. ${rs.nom}\n`;

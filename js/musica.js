@@ -182,6 +182,12 @@ Hans Zimmer|Time|60|1|c|275
 Sade|By Your Side|90|1|c|254
 `;
 const MUS_CAT=MUS_RAW.trim().split("\n").map((l,i)=>{ const p=l.split("|"); return {id:"m"+i,artist:p[0],title:p[1],bpm:+p[2],e:+p[3],tag:p[4],dur:+p[5]||205,cat:1}; });
+/* duración real y enlace exacto de canciones ya verificadas en Spotify: [índice en el catálogo, id de la pista, ms] */
+const MUS_SPOT=[[0,"2DEZmgHKAvm41k4J3R2E9Y",295176],[1,"2JPLbjOn0wPCngEot2STUS",206710],[2,"6Sq7ltF9Qa7SNFBsV5Cogx",178567],[3,"1IHWl5LamUGEuP4ozKQSXZ",243716],[4,"5Eax0qFko2dh7Rl2lYs3bx",213061],[5,"6Xom58OOXk2SoU711L2IXO",245939],
+  [6,"3k3NWokhRRkEPhCzPmV8TW",258298],[7,"71wFwRo8xGc4lrcyKwsvba",250533],[8,"47EiUVwUp4C9fGccaPuUCS",205090],[9,"3Ueq2zboxwAbsvHrOjdEqz",210367],[10,"0SqqAgdovOE24BzxIClpjw",172127],[11,"2XIc1pqjXV3Cr2BQUGNBck",203200],[12,"5DxXgozhkPLgrbKFY91w0c",192024]];
+MUS_SPOT.forEach(([i,id,ms])=>{ const t=MUS_CAT[i]; if(t){ t.dur=Math.round(ms/1000); t.url="https://open.spotify.com/track/"+id; } });
+/* duraciones aprendidas al crear playlists en tu Spotify (se guardan en tu bóveda) */
+function musAplicarDur(){ const d=(Vault.data&&Vault.data.sf&&Vault.data.sf.musdur)||{}; MUS_CAT.forEach(t=>{ const x=d[t.id]; if(x){ if(x.ms>60000) t.dur=Math.round(x.ms/1000); if(x.id) t.url="https://open.spotify.com/track/"+x.id; } }); }
 const MUS_ESTILOS={mix:{nom:"Mi mezcla",desc:"Tus artistas + lo que mejor calza",w:{}},r:{nom:"Reggaetón y urbano",desc:"Perreo, dembow, trap latino",w:{r:3,l:1}},
   p:{nom:"Pop y dance",desc:"Pop, electrónica, clásicos",w:{p:3,e:2}},h:{nom:"Hip-hop",desc:"Rap y hip-hop de gimnasio",w:{h:3,r:1}},sorp:{nom:"Sorpréndeme",desc:"Mezcla amplia, sin tus favoritos",w:{p:1,r:1,h:1,e:1,l:1}}};
 function musTier(lo,hi){ const m=(lo+hi)/2; return m<85?1:m<100?2:m<112?3:m<126?4:5; }
@@ -206,16 +212,15 @@ function musScore(t,mood,estilo,usados,recent){
 function musArmar(r,estilo){
   estilo=estilo||"mix";
   const pool=musUsuario().concat(MUS_CAT), usados=new Set(), recent=(state.historia&&state.historia.musica)||{};
-  const bloques=r.sections.map(S=>{
-    const mood=Object.assign({},sectionMood(S,r)), need=Math.max(120,sectionSeconds(S,r));
+  const G=claseGuion(r); let fin=0;   // fin = hasta dónde llegan las canciones ya elegidas
+  const bloques=r.sections.map((S,bi)=>{
+    const mood=Object.assign({},sectionMood(S,r)), need=G.bloques[bi].t1-fin;
     if(S.kind==="cool") mood.cierre=true;
     if(S.bk==="cierre") mood.cierre=true;
     const rank=pool.map(t=>({t,s:musScore(t,mood,estilo,usados,recent)})).filter(x=>x.s>-50).sort((a,b)=>b.s-a.s);
-    const tracks=[]; let total=0, lastArtist=null;
-    for(const x of rank){ if(total>=need-45) break; if(x.t.artist===lastArtist&&rank.length>tracks.length+3) continue;
-      tracks.push(x.t); total+=x.t.dur; usados.add(x.t.id); lastArtist=x.t.artist; }
+    const tracks=musElegirSet(rank,mood.cierre?Math.max(need,150):need); tracks.forEach(t=>{ usados.add(t.id); fin+=t.dur; });
     if(!mood.cierre&&S.kind!=="finisher") tracks.sort((a,b)=>a.bpm-b.bpm);   // dentro del bloque, de menos a más
-    return {secId:S.id,nom:S.nom.replace(/^Bloque \d+ · /,""),lo:mood.lo,hi:mood.hi,en:mood.en,seg:need,tracks:tracks.map(t=>Object.assign({},t))};
+    return {secId:S.id,nom:S.nom.replace(/^Bloque \d+ · /,""),lo:mood.lo,hi:mood.hi,en:mood.en,seg:Math.round(G.bloques[bi].dur),tracks:tracks.map(t=>Object.assign({},t))};
   });
   return {estilo,creada:Date.now(),bloques};
 }
@@ -248,10 +253,11 @@ function musClaseHtml(r){
   const m=musAsegurar(r), all=musTodas(m), total=all.reduce((a,t)=>a+t.dur,0), cls=estimateMinutes(r);
   const sp=musSpotEstado();
   const est=Object.keys(MUS_ESTILOS).map(k=>`<button data-action="mu-estilo" data-v="${k}" class="${m.estilo===k?"on":""}" title="${esc(MUS_ESTILOS[k].desc)}">${MUS_ESTILOS[k].nom}</button>`).join("");
-  const bl=m.bloques.map((b,bi)=>`<section class="sec mu-block"><div class="sec-head" style="--tagc:${tagColor((r.sections[bi]||{}).tag)}"><h3>${esc(b.nom)}</h3><span class="s-meta">${b.lo}–${b.hi} BPM · ${b.tracks.length} canciones</span><span class="spacer"></span>
+  const G=claseGuion(r), C=musCola(r), t0s=new Map(C.q.map(x=>[x.t,x.t0]));
+  const bl=m.bloques.map((b,bi)=>`<section class="sec mu-block"><div class="sec-head" style="--tagc:${tagColor((r.sections[bi]||{}).tag)}"><h3>${esc(b.nom)}</h3><span class="s-meta">${claseHora(G.bloques[bi].t0)}–${claseHora(G.bloques[bi].t1)} · ${b.lo}–${b.hi} BPM · ${b.tracks.length} canciones</span><span class="spacer"></span>
       <button class="btn sm" data-action="mu-regen-bloque" data-i="${bi}">↻ Otras</button></div>
       <div class="mu-en">${esc(b.en)}</div>
-      ${b.tracks.map((t,ti)=>`<div class="mu-track"><span class="idx">${String(ti+1).padStart(2,"0")}</span><div class="mt-main"><div class="mt-title">${esc(t.title)}</div><div class="mt-art">${esc(t.artist)}${t.usr?' <span class="chip solid">tuya</span>':''}</div></div>
+      ${b.tracks.map((t,ti)=>`<div class="mu-track"><span class="idx">${claseHora(t0s.get(t))}</span><div class="mt-main"><div class="mt-title">${esc(t.title)}</div><div class="mt-art">${esc(t.artist)}${t.usr?' <span class="chip solid">tuya</span>':''}</div></div>
         <span class="mt-bpm num">${t.bpm?"≈ "+t.bpm:"—"}</span><span class="mt-dur num">${musFmt(t.dur)}</span>
         <div class="mt-acts"><a class="btn sm primary" href="${esc(t.url||musSearchUrl(t))}" target="_blank" rel="noopener">▶ Spotify</a><button class="pg" data-action="mu-swap" data-b="${bi}" data-t="${ti}" title="Cambiar canción" aria-label="Cambiar canción">↻</button><button class="del" data-action="mu-del" data-b="${bi}" data-t="${ti}" aria-label="Quitar canción">✕</button></div></div>`).join("")||`<div class="mu-empty">Sin canciones para esta energía — pulsa "Otras" o cambia el estilo.</div>`}
     </section>`).join("");
@@ -259,6 +265,7 @@ function musClaseHtml(r){
       <div class="acts"><button class="btn primary" data-action="mu-copiar">⧉ Copiar lista</button>${sp.listo?`<button class="btn" data-action="mu-crear-spotify">＋ Crear en mi Spotify</button>`:`<button class="btn" data-action="go" data-screen="ajustes" title="Conectar una sola vez">＋ Crear en Spotify…</button>`}<button class="btn ghost" data-action="mu-regen">↻ Rehacer todo</button></div></div>
     <label class="mini" style="margin-top:12px">Estilo</label><div class="seg">${est}</div>
     <p class="hint" style="margin-top:10px">BPM aproximado de referencia (Spotify ya no los publica): úsalo como guía. Tus artistas favoritos y tus canciones pesan más. La búsqueda de Spotify abre la canción en la app.</p></div>
+    ${musLineaHtml(r)}
     <div class="sections">${bl}</div>`;
 }
 function musMisHtml(){
@@ -280,6 +287,7 @@ function musResumenHtml(r){
 
 /* ---------- acciones ---------- */
 function musClick(a,t){
+  if(a.indexOf("mu-iv-")===0) return ivMusicClick(a,t);
   const r=state.routine;
   if(a==="mu-estilo"){ r.musica=musArmar(r,t.dataset.v); render(); return true; }
   if(a==="mu-regen"){ r.musica=musArmar(r,musAsegurar(r).estilo); render(); return true; }
@@ -350,7 +358,7 @@ async function musCrearEnSpotify(r){
         let j=await spApi("/search?"+new URLSearchParams({q:"track:"+t.title+" artist:"+t.artist,type:"track",limit:"1"}));
         let it=j&&j.tracks&&j.tracks.items&&j.tracks.items[0];
         if(!it){ j=await spApi("/search?"+new URLSearchParams({q:t.artist+" "+t.title,type:"track",limit:"1"})); it=j&&j.tracks&&j.tracks.items&&j.tracks.items[0]; }
-        if(it) uri=it.uri;
+        if(it){ uri=it.uri; if(it.duration_ms&&!t.usr){ const sf=Vault.data.sf, d=sf.musdur||(sf.musdur={}); d[t.id]={ms:it.duration_ms,id:String(it.uri).split(":").pop()}; t.dur=Math.round(it.duration_ms/1000); } }
       }
       if(uri) uris.push(uri); else faltan.push(t.title);
     }

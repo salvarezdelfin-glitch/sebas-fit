@@ -165,7 +165,7 @@ document.addEventListener("change",e=>{
 function enterApp(){
   document.getElementById("authgate").classList.add("hidden");
   document.getElementById("appRoot").classList.add("on");
-  hydrateSculpt(); armRegistrarCustom(); aprRegistrarGuardado(); ARMS=null; state.screen="hoy"; render();
+  hydrateSculpt(); armRegistrarCustom(); aprRegistrarGuardado(); musAplicarDur(); ARMS=null; state.screen="hoy"; render();
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // pide que el navegador no borre los datos
   musSpotRetorno().then(ok=>{ if(ok){ state.screen="ajustes"; render(); } });
 }
