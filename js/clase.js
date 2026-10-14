@@ -37,6 +37,25 @@ function fzSlotSeg(s,r){
   return f.sets*(reps*fzRepSeg(e)+10)+(f.sets-1)*f.rest+20;
 }
 function fzCardioSeg(n,p){ return n*(p.work+p.rest)*p.rondas+40; }
+/* una biserie: A y B se alternan sin descanso entre ellos y se descansa al terminar los dos */
+function fzTrabajo(s,r){ const f=fSlot(s,r), e=byId[s.ref]; return f.mid*(e&&e.lado?2:1)*fzRepSeg(e)+10; }
+function fzParSeg(a,b,r){ const fa=fSlot(a,r), fb=fSlot(b,r), sets=Math.min(fa.sets,fb.sets); return sets*(fzTrabajo(a,r)+fzTrabajo(b,r)+15)+(sets-1)*Math.max(fa.rest,fb.rest)+25; }
+/* tiempo de un bloque de fuerza (agrupa las biseries) */
+function fzSecSeg(S,r){
+  let t=0; for(let k=0;k<S.slots.length;k++){ const a=S.slots[k], b=S.slots[k+1]; if(a.par&&b&&b.par===a.par){ t+=fzParSeg(a,b,r); k++; } else t+=fzSlotSeg(a,r); } return t;
+}
+/* si se quita o se mueve un ejercicio, una biserie debe seguir siendo de dos ejercicios seguidos */
+/* los dos ejercicios de una biserie comparten series y descanso */
+function fzHarmonizar(r){
+  r.sections.forEach(S=>{ if(S.kind!=="work") return; for(let k=0;k<S.slots.length-1;k++){ const a=S.slots[k], b=S.slots[k+1]; if(a.par&&b.par===a.par){ a.sets=b.sets=Math.min(a.sets,b.sets); a.rest=b.rest=Math.max(a.rest,b.rest); k++; } } });
+}
+function fzNormalizarPares(r){
+  if(!r||!r.v2) return;
+  r.sections.forEach(S=>{ if(S.kind!=="work") return;
+    const cuenta={}; S.slots.forEach(s=>{ if(s.par) cuenta[s.par]=(cuenta[s.par]||0)+1; });
+    S.slots.forEach((s,k)=>{ if(!s.par) return; const ant=S.slots[k-1], sig=S.slots[k+1], vecino=(ant&&ant.par===s.par)||(sig&&sig.par===s.par); if(cuenta[s.par]!==2||!vecino) delete s.par; });
+  });
+}
 
 /* familias de movimiento: dos ejercicios de la misma familia no se repiten en una clase */
 const FZ_FAM=[[/flexion|push-up|pike/,"flexion"],[/press (de )?pecho|press inclinado|svend|apertura de pecho/,"presspecho"],[/press (de )?hombro|arnold|militar/,"presshombro"],
@@ -104,18 +123,23 @@ function fzFinisher(minCardio,dif){
 }
 
 /* ---------- generador ---------- */
+function fzNuevo(e,rol,F,rest){ const x=slot(e), pr=F[rol]; x.rol=rol; x.sets=pr.sets; x.rep=pr.rep.slice(); x.rest=rest(rol); return x; }
 function fzBloque(sd,cfg,dif,F,rest,ctx,used,budget,minEj,manual){
-  const pools=fzRolPools(sd.key,cfg.fModo), roles=["P","S","A","A"], slots=[]; let t=0;
-  for(let i=0;i<roles.length;i++){
-    const rol=roles[i]; if(manual&&slots.length>=manual) break;
-    const cand=fzTodos(pools[rol]).filter(e=>!used.has(e.id)&&!slots.some(s=>s.ref===e.id)); if(!cand.length) continue;
-    cand.sort((a,b)=>fzScore(b,rol,dif,ctx)-fzScore(a,rol,dif,ctx));
-    const e=cand[0], x=slot(e), pr=F[rol];
-    x.rol=rol; x.sets=pr.sets; x.rep=pr.rep.slice(); x.rest=rest(rol);
-    if(rol==="P") x.nota="Haz 1–2 series de aproximación al 50 % y 70 % antes de la primera serie de trabajo";
-    const seg=fzSlotSeg(x,{series:pr.sets,rango:"",objetivo:dif,descanso:0});
+  const pools=fzRolPools(sd.key,cfg.fModo), bis=cfg.fFormato==="biseries", slots=[]; let t=0, gid=0;
+  const unidades=bis?[["P"],["S","A"],["A","A"]]:[["P"],["S"],["A"],["A"]];
+  const elegir=(rol,propios)=>{ const cand=fzTodos(pools[rol]).filter(e=>!used.has(e.id)&&!slots.some(s=>s.ref===e.id)&&!propios.some(s=>s.ref===e.id)); if(!cand.length) return null; cand.sort((a,b)=>fzScore(b,rol,dif,ctx)-fzScore(a,rol,dif,ctx)); return cand[0]; };
+  for(const u of unidades){
+    if(manual&&slots.length>=manual) break;
+    const nuevos=[]; for(const rol of u){ const e=elegir(rol,nuevos); if(!e) break; const x=fzNuevo(e,rol,F,rest); if(rol==="P") x.nota="Haz 1–2 series de aproximación al 50 % y 70 % antes de la primera serie de trabajo"; nuevos.push(x); }
+    if(!nuevos.length) continue;
+    let seg;
+    if(nuevos.length===2){
+      const id="p"+(++gid), pr=Math.round(Math.max(nuevos[0].rest,nuevos[1].rest)*0.85/5)*5, sets=Math.min(nuevos[0].sets,nuevos[1].sets);
+      nuevos.forEach(x=>{ x.par=id; x.rest=pr; x.sets=sets; }); nuevos[1].nota="Biserie: sin descanso entre A y B; descansas al terminar los dos";
+      seg=fzParSeg(nuevos[0],nuevos[1],{series:sets,rango:"",objetivo:dif,descanso:0});
+    } else seg=fzSlotSeg(nuevos[0],{series:nuevos[0].sets,rango:"",objetivo:dif,descanso:0});
     if(!manual&&slots.length>=minEj&&t+seg>budget*1.05) break;           // lo que no cabe, no entra
-    slots.push(x); t+=seg; used.add(e.id); ctx.fams.add(fzFam(e)); ctx.mat=e.eq;
+    nuevos.forEach(x=>{ slots.push(x); used.add(x.ref); ctx.fams.add(fzFam(byId[x.ref])); ctx.mat=byId[x.ref].eq; }); t+=seg;
   }
   return {slots,t};
 }
@@ -128,21 +152,26 @@ function fzComprimir(r,objSeg){
     ()=>{ let c=false; work.forEach(S=>S.slots.forEach(x=>{ const n=Math.max(30,Math.round(x.rest*0.8/5)*5); if(n<x.rest){ x.rest=n; c=true; } })); return c; },
     ()=>{ let c=false; work.forEach(S=>S.slots.forEach(x=>{ if(x.rol==="P"&&x.sets>3){ x.sets--; c=true; } })); return c; },
     ()=>{ if(prep&&prep.slots.length>3){ prep.slots.pop(); return true; } if(fin&&fin.slots.length>2){ fin.slots.pop(); return true; } return false; },
-    ()=>{ let c=false; work.forEach(S=>S.slots.forEach(x=>{ if(x.rol==="S"&&x.sets>2){ x.sets--; c=true; } })); return c; }
+    ()=>{ let c=false; work.forEach(S=>S.slots.forEach(x=>{ if(x.rol==="S"&&x.sets>2){ x.sets--; c=true; } })); return c; },
+    // último recurso: quitar el último ejercicio (o biserie) del bloque más largo, dejando al menos dos ejercicios
+    ()=>{ const B=work.slice().sort((a,b)=>fzSecSeg(b,r)-fzSecSeg(a,r))[0]; if(!B||B.slots.length<=2) return false; const x=B.slots[B.slots.length-1];
+      if(x.par){ const id=x.par, quedan=B.slots.filter(q=>q.par!==id); if(quedan.length>=2) B.slots=quedan; else { B.slots.pop(); B.slots.forEach(q=>{ if(q.par===id) delete q.par; }); } } else B.slots.pop(); return true; }
   ];
-  let g=0; for(const p of pasos){ while(total()>objSeg*1.06&&g++<8&&p()){} }
+  let g=0; for(const p of pasos){ while(total()>objSeg*1.06&&g++<14&&p()){} }
 }
-/* si sobra tiempo, se agrega un accesorio más donde quepa */
+/* si sobra tiempo, se agrega un accesorio más (o una biserie de accesorios) donde quepa */
 function fzExpandir(r,cfg,dif,F,rest,ctx,used,objSeg){
-  const work=r.sections.filter(S=>S.kind==="work"), total=()=>r.sections.reduce((a,S)=>a+sectionSeconds(S,r),0); let g=0;
+  const work=r.sections.filter(S=>S.kind==="work"), total=()=>r.sections.reduce((a,S)=>a+sectionSeconds(S,r),0), bis=cfg.fFormato==="biseries"; let g=0, gid=100;
   while(g++<6){
     let metido=false;
     for(const S of work){
-      if(S.slots.length>=5) continue; const sd=MODES.fuerza[cfg.fModo].secs.find(d=>stripBloque(d.nom)===stripBloque(S.nom)); if(!sd) continue;
-      const cand=fzTodos(fzRolPools(sd.key,cfg.fModo).A).filter(e=>!used.has(e.id)); if(!cand.length) continue;
+      if(S.slots.length>=(bis?7:5)) continue; const sd=MODES.fuerza[cfg.fModo].secs.find(d=>stripBloque(d.nom)===stripBloque(S.nom)); if(!sd) continue;
+      const cand=fzTodos(fzRolPools(sd.key,cfg.fModo).A).filter(e=>!used.has(e.id)); if(cand.length<(bis?2:1)) continue;
       cand.sort((a,b)=>fzScore(b,"A",dif,ctx)-fzScore(a,"A",dif,ctx));
-      const e=cand[0], x=slot(e), pr=F.A; x.rol="A"; x.sets=pr.sets; x.rep=pr.rep.slice(); x.rest=rest("A");
-      if(total()+fzSlotSeg(x,r)<=objSeg*1.03){ S.slots.push(x); used.add(e.id); ctx.fams.add(fzFam(e)); metido=true; }
+      const nuevos=cand.slice(0,bis?2:1).map(e=>fzNuevo(e,"A",F,rest));
+      if(nuevos.length===2){ const id="p"+(++gid), pr=Math.round(Math.max(nuevos[0].rest,nuevos[1].rest)*0.85/5)*5, sets=Math.min(nuevos[0].sets,nuevos[1].sets); nuevos.forEach(x=>{ x.par=id; x.rest=pr; x.sets=sets; }); nuevos[1].nota="Biserie: sin descanso entre A y B; descansas al terminar los dos"; }
+      const extra=nuevos.length===2?fzParSeg(nuevos[0],nuevos[1],r):fzSlotSeg(nuevos[0],r);
+      if(total()+extra<=objSeg*1.03){ nuevos.forEach(x=>{ S.slots.push(x); used.add(x.ref); ctx.fams.add(fzFam(byId[x.ref])); }); metido=true; }
     }
     if(!metido) break;
   }
@@ -168,8 +197,9 @@ function generateFuerza2(cfg){
   sections.push({id:rid(),nom:"Finisher · Cardio metabólico",tag:"cardio",kind:"cardioFin",protocolo:fin.protocolo,slots:fin.slots});
   if(cfg.enfr) sections.push({id:rid(),nom:"Enfriamiento",tag:"prep",kind:"cool",slots:stableFlow(shuffle(LIB.filter(e=>e.b==="cool"&&!e.barre)).slice(0,4).map(slot))});
   const pr0=F.P, r={id:rid(),metodo:"fuerza",v2:true,nombre:`Fuerza · ${mode.nom} · ${dur} min`,fModo:cfg.fModo,objetivo:dif,rango:pr0.rep[0]+"–"+pr0.rep[1],series:pr0.sets,descanso,
-    duracion:dur,porBloque:0,sections,creada:Date.now()};
+    duracion:dur,formato:cfg.fFormato==="biseries"?"biseries":"recto",porBloque:0,sections,creada:Date.now()};
   if(!manual){ fzComprimir(r,objSeg); fzExpandir(r,cfg,dif,F,rest,ctx,used,objSeg); }
+  fzHarmonizar(r);
   computeTransitions(sections,"fuerza",descanso);
   sections.forEach(S=>{ if(S.kind==="work") S.slots.forEach(s=>{ s.trans=(s.trans||"").replace(/^Descanso \d+ s( · )?/,""); s.restCue=false; }); });
   r.porBloque=Math.round(sections.filter(S=>S.kind==="work").reduce((a,S)=>a+S.slots.length,0)/nb*10)/10;

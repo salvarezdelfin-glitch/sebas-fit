@@ -430,3 +430,7 @@ button,input,select,textarea,a{touch-action:manipulation}
 
 .cue.opc{font-size:12px;color:var(--muted);margin-top:2px}
 .iv-opc{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:center;font-size:12.5px;color:var(--muted);margin-top:2px} .iv-opc span:first-child{color:#7fb7e0} .iv-opc span:last-child{color:#e0a37f}
+.iv-name2{font-size:clamp(22px,4.2vw,42px)!important;margin-top:2px;opacity:.92} .iv-reps2{font-size:clamp(26px,5vw,60px)!important} .iv-ab{display:inline-block;font-family:var(--f-mono);font-size:.5em;vertical-align:middle;border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:0 .45em;margin-right:.2em}
+.iv-name1{font-size:clamp(24px,4.6vw,46px)!important}
+.iv-pair{display:flex;flex-direction:column;gap:12px;width:min(640px,100%);text-align:left} .iv-prow{display:flex;gap:12px;align-items:flex-start;padding:10px 14px;border:1px solid var(--hairline);border-radius:12px;background:var(--surface)} .iv-prow .iv-ab{font-size:15px!important;margin:3px 0 0;flex:none}
+.iv-pn{font-family:var(--f-display);font-weight:600;font-size:clamp(20px,4.4vw,34px);line-height:1.1} .iv-pq{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,4.6vw,38px);color:var(--accent);margin-top:2px} .iv-pq span{font-size:.45em;margin-left:6px;color:var(--ink-dim);font-weight:500} .iv-pc{font-size:13px;color:var(--muted);margin-top:2px}

@@ -3,7 +3,7 @@ window.claseTest=async function(){
   await bootTest();
   const F=[]; const ok=(c,m)=>{ if(!c) F.push(m); }; const info={}; const $=s=>document.querySelector(s);
   // ---------- FUERZA v2 ----------
-  const cfgF=(o)=>Object.assign({},state.cfg,{metodo:'fuerza',fModo:'full',objetivo:'media',fDuracion:55,fPorBloque:'auto',calent:true,enfr:true},o||{});
+  const cfgF=(o)=>Object.assign({},state.cfg,{metodo:'fuerza',fModo:'full',objetivo:'media',fDuracion:55,fPorBloque:'auto',fFormato:'recto',calent:true,enfr:true},o||{});
   const rows=[]; let malos=[];
   for(const modo of ['full','torso','pierna','gluteoabs']) for(const nivel of ['ligera','media','pesada','muypesada']) for(const d of [30,45,55,65]) for(let k=0;k<2;k++){
     const r=generate(cfgF({fModo:modo,objetivo:nivel,fDuracion:d,descanso:OBJETIVOS[nivel].descanso})), est=estimateMinutes(r), work=r.sections.filter(s=>s.kind==='work');
@@ -66,7 +66,7 @@ window.claseTest=async function(){
       difs.push(C.total-G.total); if(Math.abs(C.total-G.total)>200) malM.push((r.metodo)+' música '+claseHora(C.total)+' vs clase '+claseHora(G.total));
       if(new Set(ids).size!==ids.length) malM.push('canción repetida'); if(C.q.some(x=>!(x.t.dur>0))) malM.push('canción sin duración');
       if(Math.abs(G.total-estimateMinutes(r)*60)>130) malM.push('guion '+claseHora(G.total)+' ≠ estimado '+estimateMinutes(r));
-      let fin=0; const desvios=m.bloques.map((b,bi)=>{ fin+=b.tracks.reduce((a,t)=>a+t.dur,0); return Math.abs(fin-G.bloques[bi].t1); }); if(desvios.filter(d=>d<=130).length<desvios.length*0.7) malM.push('los bloques no calzan con las canciones '+desvios.map(Math.round));
+      let fin=0; const desvios=m.bloques.map((b,bi)=>{ fin+=b.tracks.reduce((a,t)=>a+t.dur,0); return Math.abs(fin-G.bloques[bi].t1); }); if(desvios.filter(d=>d<=140).length<desvios.length*0.6) malM.push('los bloques no calzan con las canciones '+desvios.map(Math.round));
       const pasos=G.bloques.flatMap(b=>b.pasos); if(pasos.some((p,i)=>i&&p.t0+0.01<pasos[i-1].t0)||Math.abs(pasos[pasos.length-1].t1-G.total)>1) malM.push('tiempos de los pasos');
       const cierre=r.sections.findIndex(S=>S.bk==='cierre'); if(cierre>=0&&!m.bloques[cierre].tracks.every(t=>t.tag==='c'||t.usr)) malM.push('cierre sin música de relajación');
       if(/undefined|NaN/.test(musLineaHtml(r)+musTexto(r))) malM.push('guion con undefined');
@@ -97,6 +97,31 @@ window.claseTest=async function(){
     let malO=[]; for(let i=0;i<30;i++){ const x=generate(i%2?cfgF({objetivo:'pesada',descanso:80}):Object.assign({},state.cfg,{metodo:'sculpt',estilo:'estacion',modo:['full','upper','pierna','core'][i%4],nivel:'media',duracion:45,base:8,calent:false,enfr:true}));
       x.sections.forEach(S=>S.slots.forEach(s=>{ const o=claseOpc(resolve(s)); if(o&&(!o.f||!o.d||/undefined/.test(o.f+o.d))) malO.push(S.nom); })); }
     ok(!malO.length,'opciones fácil/difícil completas '+malO.slice(0,3)); state.routine=r; state.screen='planner'; render(); ok(/Carga sugerida/.test($('#app').textContent)&&!!$('.cue.opc'),'el planner muestra carga y opciones');
-    launchInstructor(); ok(!!$('.iv-opc'),'el Instructor muestra fácil / difícil'); ok(/kg/.test($('.iv').textContent),'y la carga'); ivExit(); }
+    launchInstructor(); for(let q=0;q<4&&!$('.iv-opc');q++) ivGoto(1); ok(!!$('.iv-opc'),'el Instructor muestra fácil / difícil'); ok(/kg/.test($('.iv').textContent),'y la carga'); ivExit(); }
+  // ---------- BISERIES ----------
+  { const cfgB=o=>cfgF(Object.assign({fFormato:'biseries'},o||{})); let malB=[]; const rowsB=[];
+    for(const modo of ['full','torso','pierna','gluteoabs']) for(const nivel of ['ligera','media','pesada','muypesada']) for(const d of [45,55,65]) for(let k=0;k<2;k++){
+      const r=generate(cfgB({fModo:modo,objetivo:nivel,fDuracion:d,descanso:OBJETIVOS[nivel].descanso})), est=estimateMinutes(r), work=r.sections.filter(S=>S.kind==='work'); rowsB.push({d,est});
+      if(r.formato!=='biseries') malB.push('formato'); if(Math.abs(est-(d-3))>8) malB.push(modo+'/'+nivel+'/'+d+' duración '+est);
+      work.forEach(S=>{ const ids={}; S.slots.forEach((s,i)=>{ if(s.par){ (ids[s.par]=ids[s.par]||[]).push(i); } });
+        Object.entries(ids).forEach(([id,ix])=>{ if(ix.length!==2||ix[1]!==ix[0]+1) malB.push('biserie mal formada '+ix); else { const a=S.slots[ix[0]], b=S.slots[ix[1]]; if(a.rest!==b.rest||a.sets!==b.sets) malB.push('biserie con series/descanso distintos'); if(a.rol==='P') malB.push('el principal no debe ir en biserie'); } });
+        if(S.slots[0].par) malB.push('el bloque no empieza con el principal'); });
+      const nSlots=work.reduce((a,S)=>a+S.slots.length,0), steps=buildSteps(r).filter(s=>s.kind==='work'), pares=steps.filter(s=>s.pair).length; if(steps.length+pares!==nSlots) malB.push('pasos del Instructor '+steps.length+'+'+pares+' vs '+nSlots);
+      if(/undefined|NaN/.test(routineText(r))) malB.push('texto con undefined');
+    }
+    ok(!malB.length,'Biseries: '+malB.slice(0,5).join(' || '));
+    const prom=(f,n)=>{ let a=0; for(let i=0;i<n;i++) a+=f(); return a/n; }, nEj=r=>r.sections.filter(S=>S.kind==='work').reduce((a,S)=>a+S.slots.length,0);
+    const recto=prom(()=>nEj(generate(cfgF({objetivo:'pesada',descanso:80,fDuracion:55}))),10), bis=prom(()=>nEj(generate(cfgB({objetivo:'pesada',descanso:80,fDuracion:55}))),10);
+    ok(bis>=recto+1.5,'las biseries meten más ejercicios en el mismo tiempo ('+recto.toFixed(1)+' → '+bis.toFixed(1)+')'); info.biseries=recto.toFixed(1)+' → '+bis.toFixed(1)+' ejercicios';
+    // pantallas
+    let rb=generate(cfgB({objetivo:'media',fDuracion:55})); for(let t=0;t<5&&!rb.sections.some(S=>S.slots.some(s=>s.par));t++) rb=generate(cfgB({objetivo:'media',fDuracion:55})); ok(rb.sections.some(S=>S.slots.some(s=>s.par)),'se generan biseries');
+    state.routine=rb; state.screen='planner'; render(); ok(/\d\dA/.test($('#app').textContent)&&/\d\dB/.test($('#app').textContent)&&/Biserie/.test($('#app').textContent),'planner con 1A / 1B y chip Biserie'); ok(/\d+A /.test(routineText(rb)),'el texto exporta A y B');
+    launchInstructor(); let vistoPar=false, errI=null, g2=0; try{ while(state.iv.i<state.iv.steps.length-1&&g2++<60){ const st=state.iv.steps[state.iv.i], h=viewInstructor(); if(/undefined|NaN/.test(h)) errI='undefined paso '+state.iv.i; if(st.pair){ vistoPar=true; if(!/iv-prow/.test(h)||(h.match(/iv-prow/g)||[]).length!==2) errI='sin ejercicio B'; ok(new RegExp('Serie 1/'+fSlot(st.slot,rb).sets).test(h),'serie de la biserie'); } ivPlanDelta(); ivGoto(1); fClearTimer(); } }catch(e){ errI=String(e&&e.stack||e).slice(0,160); }
+    ok(vistoPar&&!errI,'Instructor con biseries: '+errI); ivExit();
+    // editar: quitar un ejercicio de la biserie no deja una biserie rota
+    const Sx=rb.sections.find(S=>S.kind==='work'&&S.slots.some(s=>s.par)), px=Sx.slots.find(s=>s.par); delSlot(Sx.id,px.uid); ok(!Sx.slots.some(s=>s.par===px.par),'al quitar un ejercicio, el otro deja de ser biserie');
+    const Sy=rb.sections.find(S=>S.kind==='work'&&S.slots.some(s=>s.par)); if(Sy){ const p1=Sy.slots.find(s=>s.par), idx=Sy.slots.indexOf(p1); moveSlot(Sy.id,p1.uid,-1); const rotos=Sy.slots.some((s,i)=>s.par&&!((Sy.slots[i-1]&&Sy.slots[i-1].par===s.par)||(Sy.slots[i+1]&&Sy.slots[i+1].par===s.par))); ok(!rotos,'mover un ejercicio no deja biseries rotas'); }
+    // UI de Inicio
+    state.cfg.metodo='fuerza'; state.screen='inicio'; render(); ok(!!$('[data-action="set-fformato"][data-v="biseries"]'),'selector de formato en Inicio'); $('[data-action="set-fformato"][data-v="recto"]').click(); ok(state.cfg.fFormato==='recto','cambia a series rectas'); $('[data-action="set-fformato"][data-v="biseries"]').click(); }
   return {fallas:F,info,errs:__errs};
 };

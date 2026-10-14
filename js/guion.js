@@ -68,7 +68,7 @@ function ivMusicActual(){
 function ivPlanDelta(){
   const iv=state.iv, r=state.routine; if(!iv||!r) return null;
   if(!iv.g) iv.g=claseGuion(r);
-  let n=0, plan=null; for(const b of iv.g.bloques){ for(const p of b.pasos){ if(n===iv.i){ plan=p.t0; } n++; } }
+  const st=iv.steps[iv.i], gi=st&&st.gi!=null?st.gi:iv.i; let n=0, plan=null; for(const b of iv.g.bloques){ for(const p of b.pasos){ if(n===gi){ plan=p.t0; } n++; } }
   if(plan==null) return null; return {plan,delta:iv.elapsed-plan};
 }
 function ivMusicInner(){
