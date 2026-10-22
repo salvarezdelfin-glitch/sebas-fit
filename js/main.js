@@ -3,7 +3,7 @@
    MAIN · Sebas Fit — navegación, ajustes, acceso y arranque
    ============================================================ */
 const NAV=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio","planner","armar","formato","playlists","guardadas"],"inicio"],
-  ["clientes","Clientes",["clientes","cliente"],"clientes"],["gym","Gym",["gym","plantilla"],"gym"],["cotizador","Cotizador",["cotizador"],"cotizador"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
+  ["clientes","Clientes",["clientes","cliente"],"clientes"],["gym","Gym",["gym","plantilla"],"gym"],["cotizador","Cotizador",["cotizador"],"cotizador"],["finanzas","Finanzas",["finanzas"],"finanzas"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
 const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["formato","Mi formato"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
 
 /* ---------- utilidades de interfaz ---------- */
@@ -66,6 +66,7 @@ function render(){
   else if(s==="cliente") h=viewCliente();
   else if(s==="plantilla") h=viewPlantilla();
   else if(s==="cotizador") h=viewCotizador();
+  else if(s==="finanzas") h=viewFinanzas();
   else if(s==="yo") h=viewYo();
   else if(s==="ajustes") h=viewAjustes();
   else h=viewClases();
@@ -119,6 +120,7 @@ const Mods={
     if(a.startsWith("ap-")) return apClick(a,t);
     if(a.startsWith("mu-")) return musClick(a,t);
     if(a.startsWith("yo-")) return yoClick(a,t);
+    if(a.startsWith("fi-")) return fiClick(a,t);
     if(a.startsWith("aj-")){ ajClick(a); return true; }
     if(a==="go-cot"){ COTUI.draft=cotDraftNuevo(t.dataset.id||null); COTUI.tab="nueva"; state.screen="cotizador"; render(); window.scrollTo(0,0); return true; }
     if(a==="asignar-clase"){ if(!state.routine) return true; state.modal={type:"asignar"}; renderOverlay(); return true; }
@@ -132,6 +134,7 @@ const Mods={
     if(a.startsWith("ar-")) return arInput(a,t);
     if(a.startsWith("ap-")) return apInput(a,t);
     if(a.startsWith("yo-")) return yoInput(a,t);
+    if(a.startsWith("fi-")) return fiInput(a,t);
     return false;
   },
   change(a,t){
@@ -139,9 +142,11 @@ const Mods={
     if(a.startsWith("pt-")) return ptChange(a,t);
     if(a.startsWith("ct-")) return ctChange(a,t);
     if(a.startsWith("ar-")) return arChange(a,t);
+    if(a.startsWith("fi-")) return fiChange(a,t);
     return false;
   },
   modal(md){
+    if(md.type.startsWith("fi-")) return fiModal(md);
     if(md.type==="asignar") return modalAsignar();
     if(md.type.startsWith("pt-")) return ptModal(md);
     if(md.type.startsWith("yo-")) return yoModal(md);

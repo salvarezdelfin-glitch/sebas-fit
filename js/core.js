@@ -31,6 +31,7 @@ function emptyData(){
     pt:{clientes:[],programas:[],sesiones:[],medidas:[],paquetes:[],pagos:[],cardios:[],revisiones:[]},
     cot:{precios:null,cotizaciones:[],seq:0,cfg:{}},
     yo:{perfil:{},metas:{},base:{},plan:{},carreras:[],pesas:[],pesos:[],config:{}},
+    fin:{cfg:{},tx:[],debts:[]},
   };
 }
 /* acepta el formato v1 (Clases Semanales: schedule/rates/payinfo/entries en la raíz) y el v2 */
@@ -38,7 +39,7 @@ function migrate(p){
   const d=emptyData();
   if(!p||typeof p!=="object") return d;
   if(p.app===2){
-    Object.assign(d.clases,p.clases||{}); Object.assign(d.sf,p.sf||{}); Object.assign(d.pt,p.pt||{}); Object.assign(d.cot,p.cot||{}); Object.assign(d.yo,p.yo||{});
+    Object.assign(d.clases,p.clases||{}); Object.assign(d.sf,p.sf||{}); Object.assign(d.pt,p.pt||{}); Object.assign(d.cot,p.cot||{}); Object.assign(d.yo,p.yo||{}); Object.assign(d.fin,p.fin||{});
   } else {
     d.clases.schedule=p.schedule||[]; d.clases.rates=Object.assign(d.clases.rates,p.rates||{});
     d.clases.payinfo=p.payinfo||[]; d.clases.entries=p.entries||[];
@@ -50,6 +51,9 @@ function migrate(p){
   if(!d.cot.cfg||typeof d.cot.cfg!=="object") d.cot.cfg={};
   ["perfil","metas","base","plan","config"].forEach(k=>{ if(!d.yo[k]||typeof d.yo[k]!=="object"||Array.isArray(d.yo[k])) d.yo[k]={}; });
   ["carreras","pesas","pesos"].forEach(k=>{ if(!Array.isArray(d.yo[k])) d.yo[k]=[]; });
+  if(!d.fin||typeof d.fin!=="object") d.fin={cfg:{},tx:[],debts:[]};
+  if(!d.fin.cfg||typeof d.fin.cfg!=="object"||Array.isArray(d.fin.cfg)) d.fin.cfg={};
+  ["tx","debts"].forEach(k=>{ if(!Array.isArray(d.fin[k])) d.fin[k]=[]; });
   if(!d.clases.rates||typeof d.clases.rates!=="object") d.clases.rates=emptyData().clases.rates;
   return d;
 }
@@ -57,7 +61,7 @@ function migrate(p){
 /* ---------- fusión: nunca perder registros entre dispositivos ---------- */
 const ID_ARRAYS=[["clases","schedule"],["clases","payinfo"],["clases","entries"],["clases","cobros"],
   ["pt","clientes"],["pt","programas"],["pt","sesiones"],["pt","medidas"],["pt","paquetes"],["pt","pagos"],["pt","cardios"],["pt","revisiones"],
-  ["cot","cotizaciones"],["yo","carreras"],["yo","pesas"],["yo","pesos"],["sf","saved"],["sf","programas"],["sf","historial"],["sf","playlists"],["sf","musiclib"]];
+  ["cot","cotizaciones"],["yo","carreras"],["yo","pesas"],["yo","pesos"],["fin","tx"],["fin","debts"],["sf","saved"],["sf","programas"],["sf","historial"],["sf","playlists"],["sf","musiclib"]];
 /* "newer" gana en conflictos; lo que solo existe en "older" se conserva */
 function mergeData(older,newer){
   const out=clone(newer);
@@ -71,6 +75,8 @@ function mergeData(older,newer){
   const ga=(older.sf||{}).gustos, gb=(out.sf=out.sf||{}).gustos;
   if(Array.isArray(ga)){ if(!Array.isArray(gb)) out.sf.gustos=clone(ga); else ga.forEach(g=>{ if(!gb.some(x=>String(x).toLowerCase()===String(g).toLowerCase())) gb.push(g); }); }
   if(out.cot&&older.cot&&!out.cot.precios&&older.cot.precios) out.cot.precios=clone(older.cot.precios);
+  if(older.fin&&older.fin.freelance){ out.fin=out.fin||{cfg:{},tx:[],debts:[]}; if(!out.fin.freelance||(out.fin.freelance.ts||"")<(older.fin.freelance.ts||"")) out.fin.freelance=clone(older.fin.freelance); }
+  if(older.fin&&older.fin.cfg&&Object.keys(older.fin.cfg).length){ out.fin=out.fin||{cfg:{},tx:[],debts:[]}; if(!out.fin.cfg||!Object.keys(out.fin.cfg).length) out.fin.cfg=clone(older.fin.cfg); }
   return out;
 }
 
