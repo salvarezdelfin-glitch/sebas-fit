@@ -118,6 +118,13 @@ function fiDebtStats(d){
   const liquidada=montoPagado>=miParte-.01, restantes=liquidada?0:Math.max(1,Math.ceil(saldo/pagoMensual-1e-9));
   return {meses,montoTotal,miParte,pagoMensual,montoPagado,saldo,pagados,liquidada,restantes,compartida:miParte<montoTotal-.01};
 }
+/* lo que ya debería estar pagado según las fechas: un pago mensual por cada mes que pasó desde que empezó la deuda */
+function fiDebtDebido(d){
+  const st=fiDebtStats(d), a=d.fechaInicio; if(!a||st.liquidada) return {esperado:st.montoPagado,falta:0};
+  const t=todayStr(), meses=(Number(t.slice(0,4))-Number(a.slice(0,4)))*12+Number(t.slice(5,7))-Number(a.slice(5,7))-(Number(t.slice(8))<Number(a.slice(8))?1:0);
+  const esperado=fiR2(Math.min(st.miParte,Math.max(0,meses)*st.pagoMensual));
+  return {esperado,falta:Math.max(0,fiR2(esperado-st.montoPagado))};
+}
 const fiDebtsActive=()=>FI_D().debts.filter(d=>!fiDebtStats(d).liquidada);
 const fiDeudaMensual=()=>fiSum(fiDebtsActive(),d=>fiDebtStats(d).pagoMensual);
 const fiSaldoDeudas=()=>fiSum(FI_D().debts,d=>fiDebtStats(d).saldo);
@@ -449,8 +456,10 @@ function fiViewDeudas(){
   const rated=act.filter(d=>d.tasa!=null&&d.tasa!==""); let strat="";
   if(act.length&&rated.length===act.length){ const mx=rated.slice().sort((a,b)=>(b.tasa||0)-(a.tasa||0))[0];
     strat=(mx.tasa||0)>0?`Referencia general: si te sobra dinero, la deuda con mayor tasa (${esc(mx.concepto||"la de mayor tasa")}, ${mx.tasa}%) es la que más te cuesta cada mes.`:"Referencia general: tus deudas registradas son sin intereses, así que adelantar pagos no te ahorra dinero; el dinero extra rinde más en tu fondo de emergencia."; }
+  const atraso=act.map(d=>({d,x:fiDebtDebido(d)})).filter(o=>o.x.falta>=1), faltaTot=fiSum(atraso,o=>o.x.falta);
+  const aviso=atraso.length?`<div class="fi-notice warn"><span><b>Por las fechas, ya debería estar pagado ${fiFmt(faltaTot)} más</b> (${atraso.map(o=>esc(o.d.concepto||"deuda")+" "+fiFmt(o.x.falta)).join(", ")}). Si ya lo pagaste, márcalo y quedas al corriente.</span><button class="btn sm primary" data-action="fi-debt-alcorriente">Ya pagué todo al corriente</button></div>`:"";
   return `<section class="blk"><div class="blk-head"><h2>Deudas</h2><button class="btn primary sm" data-action="fi-debt-add">+ Nueva deuda</button></div>
-    <div class="tiles tiles-3"><div class="tile"><div class="label">Debes en total</div><div class="value num" style="color:var(--danger)">${fiFmt(fiSaldoDeudas())}</div></div>
+    ${aviso}<div class="tiles tiles-3" style="margin-top:14px"><div class="tile"><div class="label">Debes en total</div><div class="value num" style="color:var(--danger)">${fiFmt(fiSaldoDeudas())}</div></div>
       <div class="tile"><div class="label">Pagos al mes</div><div class="value num">${fiFmt(deudaMes)}</div><div class="foot">${dti==null?"":`<span style="color:${dc}">${fiPct(dti)}</span> de tu ingreso`}</div></div>
       <div class="tile"><div class="label">Libre de deudas en</div><div class="value num">${libre}</div><div class="foot">${esc(libreSub)}</div></div></div>
     <div class="grid-cards" style="margin-top:14px">${D.length?cards:`<p class="hint">Sin deudas registradas. Agrega una con “+ Nueva deuda”.</p>`}</div>${strat?`<p class="hint" style="margin-top:12px">${strat}</p>`:""}</section>${fiCortesBlk()}`;
@@ -724,6 +733,9 @@ function fiClick(a,t){
     if(!confirm("¿Eliminar esta deuda? Los pagos que ya registraste como gasto no se borran.")) return true;
     const i=D.debts.findIndex(d=>d.id===t.dataset.id); if(i<0) return true; const [x]=D.debts.splice(i,1); touch(); closeModal(); render();
     toastUndo("Deuda eliminada",()=>{ D.debts.splice(Math.min(i,D.debts.length),0,x); touch(); render(); }); return true; }
+  if(a==="fi-debt-alcorriente"){
+    let n=0; fiDebtsActive().forEach(d=>{ const x=fiDebtDebido(d); if(x.falta>=1){ d.montoPagado=x.esperado; delete d.mesesPagados; n++; } });
+    if(n){ touch(); render(); toast("Listo: "+n+" "+fiPl(n,"deuda al corriente","deudas al corriente")); } return true; }
   if(a==="fi-debt-pay"){
     const d=D.debts.find(x=>x.id===t.dataset.id); if(!d) return true; const st=fiDebtStats(d), pay=fiR2(Math.min(st.pagoMensual,st.saldo));
     d.montoPagado=fiR2(st.montoPagado+pay); delete d.mesesPagados;
@@ -820,7 +832,8 @@ function fiImport(p){
     });
   }
   const seenD=new Set(F.debts.map(d=>(d.fuente||"")+"|"+(d.concepto||"")+"|"+d.montoTotal));
-  (p.debts||[]).forEach(d=>{ const k=(d.fuente||"")+"|"+(d.concepto||"")+"|"+d.montoTotal; if(seenD.has(k)) return; const x={...d}; x.id=x.id&&!F.debts.some(y=>y.id===x.id)?x.id:newId("d"); F.debts.push(x); nd++; });
+  (p.debts||[]).forEach(d=>{ const k=(d.fuente||"")+"|"+(d.concepto||"")+"|"+d.montoTotal;
+    if(seenD.has(k)){ const ex=F.debts.find(y=>(y.fuente||"")+"|"+(y.concepto||"")+"|"+y.montoTotal===k); if(ex&&Number(d.montoPagado)>Number(ex.montoPagado||0)){ ex.montoPagado=Number(d.montoPagado); delete ex.mesesPagados; } return; } const x={...d}; x.id=x.id&&!F.debts.some(y=>y.id===x.id)?x.id:newId("d"); F.debts.push(x); nd++; });
   const seenT=new Set(F.tx.map(t=>t.id));
   (p.tx||[]).forEach(t=>{ if(!t||!t.date||seenT.has(t.id)) return; const x={...t}; if(!x.id) x.id=newId("f"); F.tx.push(x); nt++; });
   return {debts:nd,tx:nt};
