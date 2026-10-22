@@ -317,7 +317,7 @@ function fiViewHoy(){
   const m=fiModel(); let alert="";
   if(!m.hasData) alert=`<div class="fi-notice warn"><span><b>Aún no hay ingresos.</b> Marca las clases que das (o los cobros) en Clases y aquí se calcula tu plan.</span><button class="btn sm" data-action="go" data-screen="hoy">Ir a Clases</button></div>`;
   else if(m.stale) alert=`<div class="fi-notice warn"><span><b>Tu último ingreso es del ${fmtCorto(m.last)}</b> (hace ${m.daysSince} días). El plan usa datos viejos: marca tus clases en Clases.</span><button class="btn sm" data-action="go" data-screen="hoy">Ir a Clases</button></div>`;
-  return `${alert}${fiHero()}${fiGastosCard()}${fiCobrosBlk()}
+  return `${alert}${fiHero()}${fiPasosCard()}${fiResumenCard()}${fiGastosCard()}${fiCobrosBlk()}
     <div class="fi-grid2 blk">${fiDiagCard()}${fiPlanCard()}</div>
     <section class="blk"><div class="card">${fiSimCard()}</div></section>`;
 }
@@ -329,6 +329,45 @@ function fiHero(){
   return `<section class="blk"><div class="fi-hero"><span class="eyebrow">Hoy puedes gastar</span><div class="fi-hero-amt ${cls}">${amt}</div><p class="fi-hero-sub">${sub}</p>
     <div class="fi-meter"><i style="width:${pc}%;background:${color}"></i></div>
     <div class="fi-hero-foot"><span>Gastado ${fiFmt(h.gastado)} de ${fiFmt(Math.max(0,p.gasto))} · quincena ${fiQLabel(h.q)}</span><span>${p.base>0?`Base ${fiFmt(p.base)} − deudas ${fiFmt(p.deudas)} − ahorro ${fiFmt(p.ahorro)}`:""}</span></div></div></section>`;
+}
+
+/* ---------- TU PLAN, PASO A PASO + LO QUE TE DICE TU DINERO ---------- */
+function fiMesesLibre(){ const act=fiDebtsActive(); return act.length?Math.max(...act.map(d=>fiDebtStats(d).restantes)):0; }
+function fiPasosCard(){
+  const c=fiCfg(), h=fiHeroModel(), p=h.p, hoy=todayStr(), qEnd=h.q.endStr, pasos=[];
+  if(p.base<=0) return "";
+  // 1) tarjetas: lo que vence y cuándo
+  Object.keys(c.fuenteCortes).map(fiCard).filter(x=>x.pagoD&&x.aPagar>0).sort((a,b)=>a.pagoD.localeCompare(b.pagoD)).forEach(x=>{
+    pasos.push({d:x.diasPago,t:`Paga ${fiTitle(x.key)}: ${fiFmt(x.aPagar)}`,s:`vence el ${fmtCorto(x.pagoD)} (${x.diasPago===0?"hoy":x.diasPago===1?"mañana":"en "+x.diasPago+" días"})${x.msi>0?` · ${fiFmt(x.saldo)} del corte + ${fiFmt(x.msi)} de tus mensualidades`:""}`,warn:x.diasPago<=3});
+  });
+  // 2) deudas fuera de tarjeta (efectivo, préstamos)
+  const keys=new Set(Object.keys(c.fuenteCortes));
+  fiDebtsActive().filter(d=>!keys.has((d.fuente||"").trim().toLowerCase())).forEach(d=>{ const st=fiDebtStats(d);
+    pasos.push({d:99,t:`Paga ${esc(d.concepto||"deuda")}: ${fiFmt(Math.min(st.pagoMensual,st.saldo))} este mes`,s:`${esc(d.fuente||"")} · faltan ${st.restantes} ${fiPl(st.restantes,"pago","pagos")}`,btn:`<button class="btn sm" data-action="fi-debt-pay" data-id="${esc(d.id)}">Ya lo pagué</button>`}); });
+  // 3) ahorro al fondo
+  const q=h.q, aportQ=fiSum(fiTxIn(q.startStr,hoy).filter(t=>t.type==="expense"&&t.categoryId==="ahorro"),t=>t.amount), faltaAh=Math.max(0,p.ahorro-aportQ);
+  if(p.ahorro>0) pasos.push({d:98,t:faltaAh>=1?`Aparta ${fiFmt(Math.round(faltaAh))} a tu fondo de emergencia`:"Fondo de emergencia: listo esta quincena",s:faltaAh>=1?`lo primero cuando cobres, antes de gastar`:`ya llevas ${fiFmt(aportQ)}`,btn:faltaAh>=1?`<button class="btn sm" data-action="fi-fondo-quick" data-monto="${Math.round(faltaAh)}">Ya aparté</button>`:"",ok:faltaAh<1});
+  // 4) gastar
+  pasos.push({d:100,t:h.restante>0?`Gasta máximo ${fiFmt(h.restante)} hasta el ${fmtCorto(qEnd)}`:"Ya no te queda para gastar esta quincena",s:h.restante>0?`unos ${fiFmt(Math.floor(h.porDia))} al día · lo demás ya tiene dueño`:"solo lo esencial hasta que cobres",warn:h.restante<=0});
+  pasos.sort((a,b)=>a.d-b.d);
+  const rows=pasos.map((x,i)=>`<div class="fi-paso ${x.ok?"ok":""}"><span class="fi-paso-n">${x.ok?"✓":i+1}</span><div class="fi-paso-body"><b ${x.warn?'style="color:var(--warn)"':""}>${x.t}</b><div class="hint" style="margin:2px 0 0">${x.s}</div></div>${x.btn||""}</div>`).join("");
+  return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Qué te toca esta quincena</h3><span class="hint">${fiQLabel(h.q)} · cuentas con ~${fiFmt(p.base)}</span></div><div class="fi-pasos">${rows}</div></div></section>`;
+}
+function fiResumenCard(){
+  const c=fiCfg(), pM=fiPlan("mensual"), pQ=fiPlan("quincenal"), L=[];
+  if(pM.base<=0) return "";
+  const deudaMes=fiDeudaMensual(), dti=deudaMes/pM.base, libreMeses=fiMesesLibre();
+  L.push(`Te entran más o menos <b>${fiFmt(pQ.base)} por quincena</b> (${fiFmt(pM.base)} al mes). Tus deudas se llevan <b>${fiFmt(deudaMes)} al mes</b>, el ${fiPct(dti)} de lo que ganas${dti<=.2?": es sano.":dti<=.35?": es manejable, pero no metas más compras a meses.":": es mucho; evita cualquier compra a meses por ahora."}`);
+  if(libreMeses>0){ const t=new Date(); t.setMonth(t.getMonth()+libreMeses); L.push(`Si pagas puntual, te quedas <b>sin deudas en ${new Intl.DateTimeFormat("es-MX",{month:"long",year:"numeric"}).format(t)}</b> (${libreMeses} ${fiPl(libreMeses,"mes","meses")}). Mientras tanto, cada mes que liquidas una deuda te libera ese pago.`); }
+  const G=fiGastosAprox("mensual");
+  if(G>0){ const libre=pM.base-deudaMes-G; L.push(libre>=0?`Con tus gastos de siempre (${fiFmt(G)} al mes) te quedan <b>${fiFmt(libre)} libres al mes</b> antes de ahorrar.`:`<b>Ojo:</b> entre deudas (${fiFmt(deudaMes)}) y gastos de siempre (${fiFmt(G)}) te faltan <b>${fiFmt(-libre)} al mes</b>. Hay que recortar gastos o subir ingreso.`); }
+  else L.push(`No sé en qué gastas: anota más abajo tus gastos de siempre y te digo cuánto te sobra de verdad.`);
+  const esencial=deudaMes+(G>0?G:fiConsumoProm()), meta=Number(c.fondoMeta||0)||Math.round(esencial*3/100)*100, ah=fiFondo();
+  if(esencial>0&&pM.ahorro>0){ const falta=Math.max(0,meta-ah), mm=falta/pM.ahorro;
+    L.push(falta<=0?`Tu fondo de emergencia ya cubre 3 meses. Mantenlo y ahorra para lo que quieras.`:`Tu fondo de emergencia ideal son <b>${fiFmt(meta)}</b> (3 meses de lo esencial); llevas ${fiFmt(ah)}. Apartando ${fiFmt(pM.ahorro)} al mes lo logras en <b>~${Math.ceil(mm)} ${fiPl(Math.ceil(mm),"mes","meses")}</b>.`); }
+  const ins=fiDiag().insights.filter(i=>i.sev>=2)[0];
+  if(ins) L.push(`Lo más importante ahora: <b>${esc(ins.t)}.</b> ${esc(ins.p)}`);
+  return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Lo que te dice tu dinero</h3><span class="hint">orientación general, no es asesoría financiera</span></div><ul class="fi-resumen">${L.map(x=>"<li>"+x+"</li>").join("")}</ul></div></section>`;
 }
 
 /* mis gastos de siempre (aprox) + cuánto apartar siempre al fondo de emergencia */
