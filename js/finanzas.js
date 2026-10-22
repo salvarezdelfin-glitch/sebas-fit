@@ -743,6 +743,22 @@ function fiChange(a,t){
 }
 /* si Potenciador actualiza su resumen mientras Finanzas está abierta (otra pestaña), se refleja solo */
 window.addEventListener("storage",e=>{ if(e.key==="pc_fin_resumen"&&Vault.data&&state.screen==="finanzas"&&fiSyncFreelance()) render(); });
+/* enlace de carga: sebas-fit/#fin=<datos>. El fragmento (#) nunca viaja a ningún servidor; se borra de la barra y se importa al desbloquear */
+(function(){
+  let raw=null;
+  try{ const m=/[#&]fin=([A-Za-z0-9_-]+)/.exec(location.hash); if(m){ raw=m[1]; sessionStorage.setItem("fiSeed",raw); history.replaceState(null,"",location.pathname+location.search); } else raw=sessionStorage.getItem("fiSeed"); }catch(e){}
+  if(!raw) return;
+  const t=setInterval(()=>{
+    if(!(typeof Vault!=="undefined"&&Vault.data)) return;
+    clearInterval(t);
+    try{
+      const b=raw.replace(/-/g,"+").replace(/_/g,"/"), bin=atob(b+"=".repeat((4-b.length%4)%4));
+      const r=fiImport(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin,c=>c.charCodeAt(0)))));
+      touch(); sessionStorage.removeItem("fiSeed"); state.screen="finanzas"; FI.tab="hoy"; render();
+      toast(r.debts||r.tx?`Cargué ${r.debts} deuda(s) y ${r.tx} movimiento(s)`:"Tus datos ya estaban cargados");
+    }catch(e){ try{ sessionStorage.removeItem("fiSeed"); }catch(_){} toast("No pude leer el enlace de carga"); }
+  },400);
+})();
 /* importa lo que llevabas en Libro Mayor (una vez): config, deudas y movimientos manuales — sin duplicar */
 function fiImport(p){
   if(!p||typeof p!=="object") throw new Error("formato");
