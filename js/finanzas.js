@@ -838,3 +838,10 @@ function fiImport(p){
   (p.tx||[]).forEach(t=>{ if(!t||!t.date||seenT.has(t.id)) return; const x={...t}; if(!x.id) x.id=newId("f"); F.tx.push(x); nt++; });
   return {debts:nd,tx:nt};
 }
+
+/* en Bolsillo (/finanzas/) lo que sea de clases, rutinas, etc. se abre en Sebas Fit completa */
+document.addEventListener("click",e=>{
+  if(!window.APP_MODE) return;
+  const t=e.target.closest&&e.target.closest('[data-action="go"]'); if(!t||t.dataset.screen==="finanzas"||t.dataset.screen==="ajustes") return;
+  e.preventDefault(); e.stopPropagation(); location.href="../";
+},true);

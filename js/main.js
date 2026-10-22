@@ -2,8 +2,10 @@
 /* ============================================================
    MAIN · Sebas Fit — navegación, ajustes, acceso y arranque
    ============================================================ */
-const NAV=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio","planner","armar","formato","playlists","guardadas"],"inicio"],
+const NAV_TODO=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio","planner","armar","formato","playlists","guardadas"],"inicio"],
   ["clientes","Clientes",["clientes","cliente"],"clientes"],["gym","Gym",["gym","plantilla"],"gym"],["cotizador","Cotizador",["cotizador"],"cotizador"],["finanzas","Finanzas",["finanzas"],"finanzas"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
+const SOLO_FIN=window.APP_MODE==="finanzas";   // /finanzas/ = la misma app, abierta solo en Finanzas (se instala aparte como "Bolsillo")
+const NAV=SOLO_FIN?NAV_TODO.filter(n=>n[0]==="finanzas"||n[0]==="ajustes"):NAV_TODO;
 const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["formato","Mi formato"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
 
 /* ---------- utilidades de interfaz ---------- */
@@ -170,7 +172,7 @@ document.addEventListener("change",e=>{
 function enterApp(){
   document.getElementById("authgate").classList.add("hidden");
   document.getElementById("appRoot").classList.add("on");
-  hydrateSculpt(); armRegistrarCustom(); aprRegistrarGuardado(); musAplicarDur(); ARMS=null; state.screen="hoy"; render();
+  hydrateSculpt(); armRegistrarCustom(); aprRegistrarGuardado(); musAplicarDur(); ARMS=null; state.screen=SOLO_FIN?"finanzas":"hoy"; render();
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // pide que el navegador no borre los datos
   musSpotRetorno().then(ok=>{ if(ok){ state.screen="ajustes"; render(); } });
 }
