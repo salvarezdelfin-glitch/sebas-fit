@@ -843,5 +843,5 @@ function fiImport(p){
 document.addEventListener("click",e=>{
   if(!window.APP_MODE) return;
   const t=e.target.closest&&e.target.closest('[data-action="go"]'); if(!t||t.dataset.screen==="finanzas"||t.dataset.screen==="ajustes") return;
-  e.preventDefault(); e.stopPropagation(); location.href="../";
+  e.preventDefault(); e.stopPropagation(); location.href="/sebas-fit/";
 },true);
