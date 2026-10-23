@@ -1,4 +1,4 @@
-const CACHE = "sebasfit-v24";
+const CACHE = "sebasfit-v25";
 const SHELL = ["./","./index.html","./manifest.webmanifest","./css/fonts.css","./css/lock.css","./css/sculpt.css","./css/modulos.css","./css/finanzas.css",
   "./js/fflate.js","./js/core.js","./js/sculpt.js","./js/estacion.js","./js/armar.js","./js/aprender.js","./js/clase.js","./js/guion.js","./js/apoyo.js","./js/musica.js","./js/clases.js","./js/ptlib.js","./js/pt.js","./js/pt2.js","./js/proyeccion.js","./js/pdf.js","./js/pt3.js","./js/yo.js","./js/yo-ui.js","./js/cot.js","./js/finanzas.js","./js/main.js",
   "./icon-192.png","./icon-512.png","./apple-touch-icon.png","./favicon.png",
@@ -24,7 +24,7 @@ self.addEventListener("fetch", e => {
   }
   // código y páginas: la red si responde pronto (para tener la versión nueva); con señal débil o sin señal, lo guardado
   e.respondWith(
-    withTimeout(fetch(req).then(res => { const cp = res.clone(); caches.open(CACHE).then(c => c.put(req, cp)).catch(() => {}); return res; }), 3500)
+    withTimeout(fetch(req,{cache:"no-cache"}).then(res => { const cp = res.clone(); caches.open(CACHE).then(c => c.put(req, cp)).catch(() => {}); return res; }), 3500)
       .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || (req.mode === "navigate" ? caches.match("./index.html") : Response.error())))
   );
 });
