@@ -6,7 +6,7 @@
    Todo vive en la misma bóveda cifrada: nada de importar ni sincronizar a mano.
    Orientación general con tus propios números — no es asesoría financiera profesional.
    ============================================================ */
-const FI={tab:"hoy",month:null,planPeriod:"quincenal",cobroPer:"semanal",filter:"",ftype:"all",cp:{precio:"",fecha:"",tipo:"gusto",pago:"contado",meses:"3",tasa:"0",esperar:true},whatif:2,flN:1,flMonto:"",open:new Set(),memo:null};
+const FI={tab:"hoy",month:null,planPeriod:"quincenal",cobroPer:"semanal",filter:"",ftype:"all",cp:{precio:"",fecha:"",tipo:"gusto",pago:"contado",meses:"3",tasa:"0",esperar:true},whatif:2,inv:{aporte:"",anios:"5"},flN:1,flMonto:"",open:new Set(),memo:null};
 const FI_POT="https://salvarezdelfin-glitch.github.io/potenciador-de-conceptos/";
 const FI_CATS=[
   {id:"clases-part",name:"Clases particulares",type:"income"},{id:"otros-ing",name:"Otros ingresos",type:"income"},
@@ -444,7 +444,7 @@ function fiViewHoy(){
   const m=fiModel(); let alert="";
   if(!m.hasData) alert=`<div class="fi-notice warn"><span><b>Aún no hay ingresos.</b> Marca las clases que das (o los cobros) en Clases y aquí se calcula tu plan.</span><button class="btn sm" data-action="go" data-screen="hoy">Ir a Clases</button></div>`;
   else if(m.stale) alert=`<div class="fi-notice warn"><span><b>Tu último ingreso es del ${fmtCorto(m.last)}</b> (hace ${m.daysSince} días). El plan usa datos viejos: marca tus clases en Clases.</span><button class="btn sm" data-action="go" data-screen="hoy">Ir a Clases</button></div>`;
-  return `${alert}${fiHero()}${fiPasosCard()}${fiResumenCard()}${fiGastosCard()}${fiCobrosBlk()}
+  return `${alert}${fiSaldoOk()?"":fiSaldoPrompt()}${fiHero()}${fiPasosCard()}${fiResumenCard()}${fiGastosCard()}${fiCobrosBlk()}
     <div class="fi-grid2 blk">${fiDiagCard()}${fiPlanCard()}</div>
     <section class="blk"><div class="card">${fiCompraCard()}</div></section>`;
 }
@@ -588,6 +588,50 @@ function fiPlanCard(){
     <p class="hint">“Lo que doy” cuenta tus clases confirmadas; “Lo que cobro” cuenta solo los cobros que marcaste. Con ingresos variables, “mi mínimo” arma el plan con tu peor quincena reciente: lo que entre de más es extra.</p></div>`;
 }
 
+/* saldo de partida: sin él, "disponible" sería 0 y cualquier compra saldría "no recomendable" */
+const fiSaldoOk=()=>fiCfg().accounts.some(a=>a.id!=="credito"&&a.saldoDesde);
+function fiSaldoPrompt(){
+  const ac=fiCfg().accounts.filter(a=>a.id!=="credito");
+  return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Primero: cuánto tienes hoy</h3><span class="hint">el dato que más necesito</span></div>
+    <p class="hint" style="margin-top:0">Escribe lo que tienes ahora en cada cuenta (efectivo y tarjeta de débito, sin contar tarjetas de crédito). Sin esto no puedo decirte cuánto puedes gastar ni si te alcanza para una compra; con esto, desde hoy sumo lo que cobras y resto lo que gastas.</p>
+    <div class="form-grid g3">${ac.map(a=>`<div><label class="mini">${esc(a.name)}</label><input class="inp" type="number" inputmode="decimal" step="50" placeholder="$0" id="fsi-${esc(a.id)}"></div>`).join("")}
+      <div><label class="mini">&nbsp;</label><button class="btn primary" style="width:100%" data-action="fi-saldo-inicial">Guardar</button></div></div></div></section>`;
+}
+
+/* ---------- INVERTIR: información general, no una recomendación ---------- */
+function fiInvHtml(){
+  const pM=fiPlan("mensual"), a=Number(FI.inv.aporte)||Math.round(pM.ahorro)||0, y=Math.min(40,Math.max(1,Number(FI.inv.anios)||5)), f=fiFmt;
+  const fv=(t)=>{ const r=t/100/12, n=y*12; return Math.round(r===0?a*n:a*(Math.pow(1+r,n)-1)/r); };
+  const filas=[["Tasa baja de ejemplo",4],["Tasa media de ejemplo",8],["Tasa alta de ejemplo",12]].map(([n,t])=>`<div class="fi-tr"><span>${n} (${t}% anual)</span><span class="num">${f(fv(t))}</span></div>`).join("");
+  const puesto=a*y*12;
+  return `<p class="hint" style="margin:0 0 8px">Si aportas <b>${f(a)}</b> al mes durante <b>${y} ${fiPl(y,"año","años")}</b> pones <b>${f(puesto)}</b> de tu bolsa. Con esas tasas supuestas terminarías con:</p>${filas}
+    <p class="hint">Son ejemplos para ver el efecto del tiempo y del interés compuesto, <b>no rendimientos esperados ni garantizados</b>. Una inversión real puede rendir menos, o perder.</p>`;
+}
+function fiInvertirCard(){
+  const fondo=fiFondo(), meta=Number(fiCfg().fondoMeta)||0, deuda=fiDeudaMensual(), pM=fiPlan("mensual");
+  const listo=meta>0&&fondo>=meta, puerta=!listo?`<div class="fi-notice warn"><span><b>Todavía no es momento de invertir.</b> Primero tu fondo de emergencia${meta>0?` (llevas ${fiFmt(fondo)} de ${fiFmt(meta)})`:" (ponle una meta en este mismo tab)"}. Si algo sale mal y no lo tienes, tendrías que vender la inversión justo cuando vale menos o endeudarte.</span></div>`:`<div class="fi-verdict ok"><b>Tu fondo de emergencia ya está completo</b>: ya puedes pensar en invertir lo que te sobre, solo dinero que no vayas a necesitar pronto.</div>`;
+  const nivel=(t,c,body)=>`<div class="fi-item"><div class="fi-item-head"><span class="fi-tag" style="background:${c}22;color:${c}">${t}</span></div>${body}</div>`;
+  return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Invertir: niveles de riesgo</h3><span class="hint">información general, no una recomendación</span></div>${puerta}
+    <div class="fi-grid2" style="margin-top:12px">
+      ${nivel("Poco riesgo","var(--ok)",`<p class="hint" style="margin:0">CETES (deuda del gobierno federal, plazos de 28 a 364 días), pagarés y cuentas de ahorro bancarias, fondos de deuda gubernamental. Es muy difícil perder dinero si mantienes hasta el vencimiento, pero el rendimiento es bajo y a veces apenas alcanza a la inflación. Bancos: el seguro del IPAB cubre hasta 400,000 UDI por persona e institución.</p>`)}
+      ${nivel("Riesgo medio","var(--warn)",`<p class="hint" style="margin:0">Fondos de inversión diversificados (mezcla de deuda y acciones), ETFs de índices amplios, bonos a tasa fija a plazos largos. Puede bajar 10–30% en un mal año y tardar varios en recuperarse. Piensa en 5 años o más.</p>`)}
+      ${nivel("Alto riesgo","var(--danger)",`<p class="hint" style="margin:0">Acciones de una sola empresa, criptomonedas, apalancamiento, derivados, compraventa de corto plazo, proyectos nuevos. Puede subir mucho, pero también perderse buena parte o todo. Solo con dinero que puedas perder sin que te cambie la vida.</p>`)}</div>
+    <p class="fi-cap-t" style="margin-top:14px">Reglas que valen para cualquiera</p>
+    <ul class="hint" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px">
+      <li>Primero: sin deudas caras y con fondo de emergencia. ${deuda>0?`Hoy tus deudas son ${fiFmt(deuda)} al mes; las tuyas son sin intereses según tus datos, pero termínalas con calma antes de arriesgar.`:""}</li>
+      <li>Más rendimiento posible significa más riesgo de pérdida; nadie lo evita. Si te prometen ganancias seguras o muy altas, es una señal de fraude.</li>
+      <li>Diversifica: no pongas todo en una sola empresa ni en una sola cosa.</li>
+      <li>El tiempo importa: lo que necesitas en menos de 1–2 años va en poco riesgo; solo lo que no tocarás en 5 años o más puede ir a más riesgo.</li>
+      <li>Revisa comisiones (compra, venta, custodia) y que la casa de bolsa o la operadora de fondos esté autorizada por la CNBV.</li>
+      <li>Nunca inviertas con dinero prestado ni con el de tus pagos de tarjeta.</li>
+      <li>Las tasas de CETES y fondos cambian: consulta la vigente en la fuente oficial (cetesdirecto.com, Banxico) o con tu institución, no en esta página.</li></ul>
+    <p class="fi-cap-t" style="margin-top:14px">Qué pasa con el tiempo y el interés compuesto</p>
+    <div class="form-grid g3"><div><label class="mini">Aporte mensual $</label><input class="inp" id="fv-aporte" type="number" inputmode="decimal" min="0" step="100" value="${esc(FI.inv.aporte||Math.round(pM.ahorro)||"")}" data-action="fi-inv"></div>
+      <div><label class="mini">Años</label><input class="inp" id="fv-anios" type="number" inputmode="numeric" min="1" max="40" step="1" value="${esc(FI.inv.anios)}" data-action="fi-inv"></div></div>
+    <div id="fv-result" style="margin-top:8px">${fiInvHtml()}</div>
+    <p class="hint">Esto es información educativa para decidir mejor, no una recomendación de qué comprar ni asesoría financiera profesional. Si vas a invertir, platica con un asesor autorizado.</p></div></section>`;
+}
+
 /* ============================================================
    CAPITAL · ¿me lo puedo comprar?, estrategia de deudas, proyección y patrimonio (usan el motor CAP de arriba)
    ============================================================ */
@@ -607,6 +651,7 @@ function fiCapInput(){
 }
 function fiCompraHtml(){
   const I=fiCapInput();
+  if(!fiSaldoOk()) return `<p class="hint">Para decirte si cabe necesito saber cuánto tienes hoy: escríbelo arriba, en "Primero: cuánto tienes hoy".</p>`;
   if(!(I.precio>0)) return `<p class="hint">Escribe cuánto cuesta y te digo si puedes pagarlo sin quedarte corto antes de tu siguiente ingreso.</p>`;
   const r=CAP.compra(I); if(r.error) return `<p class="hint">${esc(r.error)}</p>`;
   const cls={VIABLE:"ok",CONDICIONES:"justo",ESPERAR:"justo",NO:"no"}[r.veredicto], f=n=>fiFmt(n);
@@ -811,7 +856,7 @@ function fiLedger(){
 }
 
 /* ---------- CRECER ---------- */
-function fiViewCrecer(){ return fiPatrimonioCard()+fiFondo_()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
+function fiViewCrecer(){ return fiPatrimonioCard()+fiFondo_()+fiInvertirCard()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
 function fiFlWhatHtml(){
   const s=fiFlStats(), n=Number(FI.flN)||0, m=Number(FI.flMonto)||s.prom||0, pM=fiPlan("mensual");
   if(!(m>0)) return `<p class="hint">Pon el monto de un proyecto (por ejemplo lo que sueles cotizar) para ver cuánto sumaría.</p>`;
@@ -993,6 +1038,7 @@ function fiClick(a,t){
   if(a==="fi-fondo-add"){
     const m=Math.max(0,Number(fiV("ff-monto"))||0); if(!(m>0)){ toast("Pon cuánto vas a aportar"); return true; }
     fiNewTx({type:"expense",amount:m,categoryId:"ahorro",accountId:fiV("ff-cuenta")||"debito",date:todayStr(),note:"Aportación al fondo de emergencia",recurring:false}); render(); toast("Aportación registrada"); return true; }
+  if(a==="fi-saldo-inicial"){ const ac=fiCfg().accounts.filter(x=>x.id!=="credito"); let any=false; ac.forEach(x=>{ const v=fiV("fsi-"+x.id); if(v!==""&&Number.isFinite(Number(v))){ x.saldoInicial=fiR2(Math.max(-1e9,Number(v))); x.saldoDesde=todayStr(); any=true; } else { x.saldoInicial=x.saldoInicial||0; x.saldoDesde=todayStr(); } }); if(!any){ toast("Escribe cuánto tienes en al menos una cuenta"); return true; } touch(); render(); toast("Saldo guardado"); return true; }
   if(a==="fi-gf-add"){
     const nombre=fiV("fg-n").trim(), monto=Math.max(0,Number(fiV("fg-m"))||0);
     if(!nombre||!(monto>0)){ toast("Escribe en qué y cuánto, más o menos"); return true; }
@@ -1008,6 +1054,7 @@ function fiClick(a,t){
 /* escribir sin redibujar (no perder el foco) */
 function fiInput(a,t){
   if(a==="fi-search"){ FI.filter=t.value; const l=document.getElementById("fl-list"), n=document.getElementById("fl-count"); if(l) l.innerHTML=fiLedgerHtml(); if(n) n.textContent=fiLedgerRows().length+" movimientos"; return true; }
+  if(a==="fi-inv"){ FI.inv={aporte:fiV("fv-aporte"),anios:fiV("fv-anios")}; const r=document.getElementById("fv-result"); if(r) r.innerHTML=fiInvHtml(); return true; }
   if(a==="fi-cp"){ const antes=FI.cp.pago; FI.cp={precio:fiV("fcp-precio"),fecha:fiV("fcp-fecha"),tipo:fiV("fcp-tipo")||"gusto",pago:fiV("fcp-pago")||"contado",meses:fiV("fcp-meses")||FI.cp.meses,tasa:fiV("fcp-tasa")||(document.getElementById("fcp-tasa")?"0":FI.cp.tasa),esperar:fiV("fcp-esperar")!=="0"}; if(antes!==FI.cp.pago){ render(); return true; } const r=document.getElementById("fcp-result"); if(r) r.innerHTML=fiCompraHtml(); return true; }
   if(a==="fi-whatif"){ FI.whatif=t.value; const r=document.getElementById("fw-result"); if(r) r.innerHTML=fiWhatIfHtml(); return true; }
   if(a==="fi-flwhat"){ FI.flN=fiV("fl-n"); FI.flMonto=fiV("fl-m"); const r=document.getElementById("fl-result"); if(r) r.innerHTML=fiFlWhatHtml(); return true; }
