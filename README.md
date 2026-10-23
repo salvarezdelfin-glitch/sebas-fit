@@ -25,3 +25,12 @@ y seguimiento, y cotizador (presencial y rutina mandada). Instalable en compu, i
 ## Pruebas
 `node tests/core.test.js` prueba la bóveda (cifrado, migración, fusión, respaldo). Las pruebas de navegador
 están en `tests/*.browser.js` y usan una nube simulada (`tests/boot.js`).
+
+## Finanzas: motor de cálculo (`CAP` en `js/finanzas.js`)
+Entre `/*CAPITAL-START*/` y `/*CAPITAL-END*/` hay un motor sin pantalla que trabaja en **centavos enteros** (sin errores de coma flotante):
+- `disponible` y `compra` — «¿Me lo puedo comprar?»: saldo proyectado − reservas − pagos hasta el siguiente ingreso confirmado − gasto esencial − reserva de seguridad. Veredictos: viable, viable con condiciones, mejor esperar, no recomendable; fecha en que sí cabría; crédito con cuota, intereses y carga mensual.
+- `estrategiaDeudas` — avalancha vs bola de nieve con meses, intereses y orden de pago.
+- `proyeccion` — saldo a N días en escenario conservador, base y optimista.
+- `patrimonio` — activos − pasivos (solo lo que tiene valor conocido).
+Los ingresos solo esperados nunca se cuentan como dinero seguro; sin ingreso confirmado la respuesta sale «provisional». `node tests/capital.test.js` ejecuta 50 pruebas con datos ficticios y cuentas hechas a mano.
+No son asesoría financiera profesional: es aritmética con tus datos registrados.

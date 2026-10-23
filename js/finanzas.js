@@ -6,7 +6,7 @@
    Todo vive en la misma bóveda cifrada: nada de importar ni sincronizar a mano.
    Orientación general con tus propios números — no es asesoría financiera profesional.
    ============================================================ */
-const FI={tab:"hoy",month:null,planPeriod:"quincenal",cobroPer:"semanal",filter:"",ftype:"all",sim:{monto:"",meses:"1",tarjeta:""},whatif:2,flN:1,flMonto:"",open:new Set(),memo:null};
+const FI={tab:"hoy",month:null,planPeriod:"quincenal",cobroPer:"semanal",filter:"",ftype:"all",cp:{precio:"",fecha:"",tipo:"gusto",pago:"contado",meses:"3",tasa:"0",esperar:true},whatif:2,flN:1,flMonto:"",open:new Set(),memo:null};
 const FI_POT="https://salvarezdelfin-glitch.github.io/potenciador-de-conceptos/";
 const FI_CATS=[
   {id:"clases-part",name:"Clases particulares",type:"income"},{id:"otros-ing",name:"Otros ingresos",type:"income"},
@@ -62,6 +62,147 @@ function fiCatColor(id){ let h=0; for(const c of String(id)) h=(h*31+c.charCodeA
 const fiCat=id=>fiCfg().categories.find(c=>c.id===id);
 const fiAcct=id=>fiCfg().accounts.find(a=>a.id===id);
 function fiGuessAcct(f){ f=(f||"").toLowerCase(); return f.includes("efectivo")?"efectivo":(f.includes("credito")||f.includes("crédito")?"credito":"debito"); }
+
+
+/*CAPITAL-START*/
+/* ============================================================
+   MOTOR DE CÁLCULO (sin pantalla ni bóveda: solo números)
+   Todo se calcula en centavos enteros para no arrastrar errores de coma flotante; entra y sale en pesos.
+   Las cifras las calcula este código, nunca una IA. Si falta un dato, el resultado se marca "provisional".
+   ============================================================ */
+const CAP=(()=>{
+  const c=n=>Math.round((Number(n)||0)*100), p=n=>Math.round(n)/100;
+  const D=s=>{ const [y,m,d]=String(s).split("-").map(Number); return Date.UTC(y,m-1,d)/86400000; };
+  const dias=(a,b)=>Math.round(D(b)-D(a));
+  const sumar=(s,n)=>{ const t=new Date((D(s)+n)*86400000); return t.getUTCFullYear()+"-"+String(t.getUTCMonth()+1).padStart(2,"0")+"-"+String(t.getUTCDate()).padStart(2,"0"); };
+  const suma=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+  const valido=m=>Number.isFinite(Number(m))&&Number(m)>=0;
+
+  /* Cuánto dinero sobra de verdad en una fecha: saldo proyectado a esa fecha, menos lo reservado, lo que hay que pagar y
+     lo esencial que se gasta hasta el siguiente ingreso confirmado. Cada reserva y cada pago se resta una sola vez. */
+  function disponibleEn(I,fecha){
+    const hoy=I.hoy, saldo0=c(I.saldoLiquido), esc=c(I.gastoEsencialDiario), seg=c(I.reservaSeguridad);
+    const ing=(I.ingresos||[]).filter(x=>x.estado==="confirmado"||x.estado==="recibido"), pag=I.pagos||[];
+    const dHasta=Math.max(0,dias(hoy,fecha));
+    const saldoFecha=saldo0+suma(ing.filter(x=>x.fecha>=hoy&&x.fecha<=fecha),x=>c(x.monto))-suma(pag.filter(x=>x.fecha>=hoy&&x.fecha<=fecha),x=>c(x.monto))-esc*dHasta;
+    const prox=ing.filter(x=>x.fecha>fecha).sort((a,b)=>a.fecha.localeCompare(b.fecha))[0];
+    const provisional=[]; let H;
+    if(prox){ H=prox.fecha; } else { H=sumar(fecha,30); provisional.push("No hay un próximo ingreso confirmado: calculé los siguientes 30 días sin contar ingresos."); }
+    const dH=dias(fecha,H), esenH=esc*dH, pagH=pag.filter(x=>x.fecha>fecha&&x.fecha<=H), pagosH=suma(pagH,x=>c(x.monto)), reservas=suma(I.reservas||[],x=>c(x.monto));
+    const antes=saldoFecha-reservas-pagosH-esenH-seg;
+    return {fecha,H,diasHastaIngreso:prox?dH:null,saldoFecha,reservas,pagosH,pagH,esenH,seg,antes,provisional,proximoIngreso:prox||null};
+  }
+  function disponible(I){ const r=disponibleEn(I,I.hoy); return {saldo:p(c(I.saldoLiquido)),reservado:p(r.reservas),pagos:p(r.pagosH),esencial:p(r.esenH),seguridad:p(r.seg),disponible:p(r.antes),diasHastaIngreso:r.diasHastaIngreso,hasta:r.H,provisional:r.provisional}; }
+
+  /* cuota fija de un crédito (sistema francés); con tasa 0 (meses sin intereses) es solo precio/meses */
+  function cuota(monto,meses,tasaAnual){
+    const P=c(monto), n=Math.max(1,Math.round(meses)), i=(Number(tasaAnual)||0)/100/12;
+    if(i===0) return {cuota:p(P/n),total:p(P),intereses:0};
+    const k=P*i/(1-Math.pow(1+i,-n)), q=Math.round(k);
+    return {cuota:p(q),total:p(q*n),intereses:p(q*n-P)};
+  }
+
+  const VEREDICTOS={VIABLE:"COMPRA VIABLE",CONDICIONES:"COMPRA VIABLE CON CONDICIONES",ESPERAR:"MEJOR ESPERAR",NO:"NO RECOMENDABLE"};
+  /* ¿Me lo puedo comprar? Devuelve veredicto, números y razones. Nunca inventa datos: lo que falta lo lista en "faltan". */
+  function compra(I){
+    const hoy=I.hoy, fecha=(I.fecha&&I.fecha>hoy)?I.fecha:hoy, precio=c(I.precio), tipo=I.tipo||"gusto", credito=I.pago==="credito"&&I.credito&&I.credito.meses>1;
+    const faltan=[], riesgos=[], condiciones=[];
+    if(!(precio>0)) return {error:"Escribe el precio de la compra."};
+    if(!valido(I.saldoLiquido)) faltan.push("tu saldo en cuentas");
+    const base=disponibleEn(I,fecha), esc=c(I.gastoEsencialDiario);
+    if(!(esc>0)) faltan.push("cuánto gastas en lo esencial por día");
+    const colchon=Math.max(esc*3,Math.round(c(I.saldoLiquido)*.05));
+    let despues=base.antes-(credito?0:precio), cu=null, margen=null;
+    if(credito){
+      cu=cuota(I.precio,I.credito.meses,I.credito.tasaAnual);
+      const primeras=base.diasHastaIngreso==null?1:(base.diasHastaIngreso>=30?1:0);
+      despues=base.antes-c(cu.cuota)*primeras;
+      const ing=c(I.ingresoMensualBase), obl=c(I.obligacionesMensuales), esM=c(I.esencialMensual);
+      if(ing>0&&esM>0){ margen={antes:p(ing-obl-esM),despues:p(ing-obl-esM-c(cu.cuota)),carga:Math.round((obl+c(cu.cuota))*1000/ing)/10}; }
+      else faltan.push("tu ingreso mensual base y tus gastos esenciales del mes");
+      if(cu.intereses>0) riesgos.push(`Pagarías ${p(c(cu.total))} en total: ${cu.intereses} son intereses (${Math.round(cu.intereses*100/I.precio)}% del precio).`);
+      if(I.credito.tasaAnual>40) riesgos.push(`La tasa anual de ${I.credito.tasaAnual}% es muy alta: un crédito así encarece la compra.`);
+    }
+    base.provisional.forEach(x=>riesgos.push(x));
+    if(faltan.length) riesgos.push("Falta: "+faltan.join(", ")+". La recomendación es provisional.");
+    if(base.antes<0) riesgos.push("Aun sin esta compra, tus pagos y gastos hasta el siguiente ingreso superan lo que tienes.");
+    if(despues<colchon&&despues>=0) riesgos.push(`Quedarías con ${p(despues)}, por debajo de un colchón de ${p(colchon)} (3 días de lo esencial o 5% de tu saldo).`);
+    let v;
+    const provis=faltan.length>0||base.provisional.length>0;
+    if(despues<0) v="NO";
+    else if(despues<colchon) v=(tipo==="necesidad"&&I.puedeEsperar===false)?"CONDICIONES":"ESPERAR";
+    else if(despues<colchon*2||provis||(tipo==="gusto"&&I.fondoEmergencia&&I.fondoEmergencia.actual<I.fondoEmergencia.meta)) v="CONDICIONES";
+    else v="VIABLE";
+    if(credito&&margen){ const m=margen; if(m.despues<0||m.carga>40) v="NO"; else if((m.carga>30||m.despues<c(I.ingresoMensualBase)*.1/100)&&(v==="VIABLE"||v==="CONDICIONES")) v="ESPERAR"; }
+    if(credito&&cu&&cu.intereses*100/I.precio>25&&(v==="VIABLE"||v==="CONDICIONES")) v="ESPERAR";
+    if(v==="CONDICIONES"){ if(provis) condiciones.push("Confirma los datos que faltan o el ingreso que esperas antes de pagar."); if(despues<colchon*2) condiciones.push("Reduce otros gastos hasta el siguiente ingreso para no quedar al límite."); if(tipo==="gusto"&&I.fondoEmergencia&&I.fondoEmergencia.actual<I.fondoEmergencia.meta) condiciones.push("Tu fondo de emergencia aún no llega a su meta: este gasto lo retrasa."); }
+    /* primera fecha (hasta 90 días) en que cabe con colchón */
+    let fechaViable=null; if(v!=="VIABLE"){ for(let k=0;k<=90;k++){ const f=sumar(fecha,k), r=disponibleEn(I,f); if(r.antes-(credito?0:precio)>=colchon){ fechaViable=f; break; } } }
+    let alternativa;
+    if(v==="VIABLE") alternativa="Puedes comprarla. Aun así, pásala por una noche si es un gusto.";
+    else if(v==="CONDICIONES") alternativa=condiciones.join(" ");
+    else if(credito&&(v==="NO"||v==="ESPERAR")) alternativa="Un plazo más largo no la hace asequible: baja el precio, junta una parte y compra de contado, o espera.";
+    else if(fechaViable) alternativa=`Espera hasta el ${fechaViable}: para entonces tendrás el colchón después de pagarla.`;
+    else if(v==="NO"&&despues<0) alternativa=`Te faltan ${p(-despues)}. Busca una opción más barata, ahorra esa diferencia o espera un ingreso confirmado.`;
+    else alternativa="Con tus datos actuales no encuentro una fecha segura en los próximos 90 días; baja el precio o confirma más ingresos.";
+    return {veredicto:v,titulo:VEREDICTOS[v],provisional:provis,fecha,
+      saldoActual:p(c(I.saldoLiquido)),reservado:p(base.reservas),proximosPagos:p(base.pagosH),pagosDetalle:base.pagH.map(x=>({concepto:x.concepto,monto:x.monto,fecha:x.fecha})),
+      esencialHastaIngreso:p(base.esenH),disponibleAntes:p(base.antes),disponibleDespues:p(despues),colchon:p(colchon),
+      diasHastaIngreso:base.diasHastaIngreso,proximoIngreso:base.proximoIngreso,credito:cu,margenMensual:margen,
+      riesgos,faltan,alternativa,fechaViable};
+  }
+
+  /* Estrategias de pago de deudas: avalancha (mayor tasa primero) y bola de nieve (menor saldo primero).
+     Cada mes se pagan los mínimos y todo lo extra va a la deuda objetivo; al liquidar una, su mínimo pasa a la siguiente. */
+  function simulaDeudas(deudas,extraMensual,metodo,traza){
+    let D=deudas.filter(d=>c(d.saldo)>0).map(d=>({id:d.id,nombre:d.nombre,s:c(d.saldo),i:(Number(d.tasaAnual)||0)/100/12,min:c(d.pagoMinimo)}));
+    const presupuesto=suma(D,d=>d.min)+c(extraMensual), orden=[], trz=[]; let mes=0, intereses=0, noAmortiza=false;
+    if(!D.length) return {meses:0,intereses:0,pagado:0,orden:[],noAmortiza:false,traza:[]};
+    const prio=(a,b)=>metodo==="bola"?(a.s-b.s):(b.i-a.i||a.s-b.s);
+    while(D.some(d=>d.s>0)&&mes<600){
+      mes++; D.forEach(d=>{ if(d.s>0){ const int=Math.round(d.s*d.i); d.s+=int; intereses+=int; } });
+      let resto=presupuesto;
+      D.filter(d=>d.s>0).forEach(d=>{ const pg=Math.min(d.s,d.min); d.s-=pg; resto-=pg; });
+      for(const d of D.filter(x=>x.s>0).sort(prio)){ if(resto<=0) break; const pg=Math.min(d.s,resto); d.s-=pg; resto-=pg; }
+      D.forEach(d=>{ if(d.s===0&&!orden.some(o=>o.id===d.id)) orden.push({id:d.id,nombre:d.nombre,mes}); });
+      if(traza) trz.push(D.map(d=>p(d.s)));
+    }
+    if(D.some(d=>d.s>0)) noAmortiza=true;
+    const total=suma(deudas,d=>c(d.saldo));
+    return {meses:noAmortiza?null:mes,intereses:p(intereses),pagado:p(total+intereses),orden,noAmortiza,traza:trz};
+  }
+  function estrategiaDeudas(deudas,extraMensual,traza){
+    const sinTasa=deudas.filter(d=>d.tasaAnual==null||d.tasaAnual==="").map(d=>d.nombre), a=simulaDeudas(deudas,extraMensual,"avalancha",traza), b=simulaDeudas(deudas,extraMensual,"bola",traza);
+    return {avalancha:a,bola:b,ahorroIntereses:(a.noAmortiza||b.noAmortiza)?null:p(c(b.intereses)-c(a.intereses)),sinTasa};
+  }
+
+  /* Proyección del saldo en tres escenarios. Conservador: solo ingresos confirmados y gasto variable +15%.
+     Base: confirmados y 70% de lo esperado. Optimista: todo lo esperado y gasto variable -10%. */
+  function proyeccion(I,diasN){
+    const esc={conservador:{e:0,f:1.15},base:{e:.7,f:1},optimista:{e:1,f:.9}}, out={};
+    for(const k in esc){
+      let saldo=c(I.saldoLiquido), min=saldo, fMin=I.hoy, neg=0; const gv=c(I.gastoVariableDiario||I.gastoEsencialDiario||0);
+      for(let d=1;d<=diasN;d++){
+        const f=sumar(I.hoy,d);
+        (I.ingresos||[]).forEach(x=>{ if(x.fecha===f){ if(x.estado==="confirmado"||x.estado==="recibido") saldo+=c(x.monto); else if(x.estado==="esperado") saldo+=Math.round(c(x.monto)*esc[k].e); } });
+        (I.pagos||[]).forEach(x=>{ if(x.fecha===f) saldo-=c(x.monto); });
+        saldo-=Math.round(gv*esc[k].f);
+        if(saldo<min){ min=saldo; fMin=f; } if(saldo<0) neg++;
+      }
+      out[k]={final:p(saldo),minimo:p(min),fechaMinimo:fMin,diasNegativos:neg};
+    }
+    return out;
+  }
+
+  /* Patrimonio neto = activos - pasivos. Solo cuenta lo que tiene un valor conocido; lo demás se avisa. */
+  function patrimonio(activos,pasivos){
+    const ok=x=>x&&x.valor!=null&&x.valor!==""&&Number.isFinite(Number(x.valor))&&Number(x.valor)>0, A=activos.filter(ok), P=pasivos.filter(ok);
+    const a=suma(A,x=>c(x.valor)), pa=suma(P,x=>c(x.valor));
+    return {activos:p(a),pasivos:p(pa),neto:p(a-pa),sinValor:activos.concat(pasivos).filter(x=>x&&!ok(x)).map(x=>x.nombre||x.concepto||"?")};
+  }
+  return {c,p,dias,sumar,disponible,disponibleEn,cuota,compra,simulaDeudas,estrategiaDeudas,proyeccion,patrimonio,VEREDICTOS};
+})();
+/*CAPITAL-END*/
 
 /* ============================================================
    DOMINIO
@@ -285,20 +426,6 @@ function fiDiag(){
 }
 
 /* ---------- simulador de compra ---------- */
-function fiSimulate(monto,meses,tarjeta){
-  const pM=fiPlan("mensual"), h=fiHeroModel(), deudaMes=fiDeudaMensual(), cuota=monto/meses, tarifa=fiAvgRate(), lines=[]; let v;
-  if(tarifa>0) lines.push(`Equivale a ~${(monto/tarifa).toFixed(1)} clases dadas (a ${fiFmt(tarifa)} por clase).`);
-  if(h.p.gasto<=0) v="sin-plan";
-  else if(meses===1){ const ratio=h.restante>0?monto/h.restante:Infinity; v=ratio<=.6?"ok":ratio<=1?"justo":"no";
-    lines.push(h.restante>0?`Te quedan ${fiFmt(h.restante)} para gastar esta quincena; esto sería el ${fiPct(ratio)}.`:"Esta quincena ya no tienes margen para gastar."); }
-  else { const ratio=pM.gasto>0?cuota/pM.gasto:Infinity; v=ratio<=.2?"ok":ratio<=.4?"justo":"no";
-    lines.push(`A ${meses} meses son ${fiFmt(cuota)} al mes: el ${fiPct(ratio)} de lo que tienes para gastar cada mes.`);
-    if(pM.base>0){ const nuevo=(deudaMes+cuota)/pM.base; lines.push(`Tus deudas pasarían de ${fiPct(deudaMes/pM.base)} a ${fiPct(nuevo)} de tu ingreso mensual.`); if(nuevo>.4) v="no"; else if(nuevo>.35&&v==="ok") v="justo"; } }
-  if(tarjeta){ const c=fiCard(tarjeta); if(c.limite>0){ const nu=(c.uso+monto)/c.limite;
-    lines.push(`${fiTitle(tarjeta)} pasaría de ${fiPct(c.util||0)} a ${fiPct(nu)} de su límite${nu>1?" (excede el límite)":""}.`); if(nu>1) v="no"; else if(nu>.75&&v==="ok") v="justo"; } }
-  return {v,lines};
-}
-
 /* ============================================================
    VISTAS
    ============================================================ */
@@ -319,7 +446,7 @@ function fiViewHoy(){
   else if(m.stale) alert=`<div class="fi-notice warn"><span><b>Tu último ingreso es del ${fmtCorto(m.last)}</b> (hace ${m.daysSince} días). El plan usa datos viejos: marca tus clases en Clases.</span><button class="btn sm" data-action="go" data-screen="hoy">Ir a Clases</button></div>`;
   return `${alert}${fiHero()}${fiPasosCard()}${fiResumenCard()}${fiGastosCard()}${fiCobrosBlk()}
     <div class="fi-grid2 blk">${fiDiagCard()}${fiPlanCard()}</div>
-    <section class="blk"><div class="card">${fiSimCard()}</div></section>`;
+    <section class="blk"><div class="card">${fiCompraCard()}</div></section>`;
 }
 function fiHero(){
   const h=fiHeroModel(), p=h.p; let amt,cls="",sub,pc=0,color="var(--ok)";
@@ -461,19 +588,89 @@ function fiPlanCard(){
     <p class="hint">“Lo que doy” cuenta tus clases confirmadas; “Lo que cobro” cuenta solo los cobros que marcaste. Con ingresos variables, “mi mínimo” arma el plan con tu peor quincena reciente: lo que entre de más es extra.</p></div>`;
 }
 
-function fiSimHtml(){
-  const s=FI.sim, monto=Number(s.monto)||0, meses=Number(s.meses)||1;
-  if(monto<=0) return `<p class="hint">Escribe cuánto cuesta y te muestro cómo pega en tu plan.</p>`;
-  const r=fiSimulate(monto,meses,s.tarjeta), title={ok:"Cabe en tu plan",justo:"Se puede, pero queda ajustado",no:"Con tus números, hoy no cuadra","sin-plan":"Necesito tus ingresos para opinar"}[r.v];
-  return `<div class="fi-verdict ${r.v}"><b>${title}</b><ul>${r.lines.map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div>`;
+/* ============================================================
+   CAPITAL · ¿me lo puedo comprar?, estrategia de deudas, proyección y patrimonio (usan el motor CAP de arriba)
+   ============================================================ */
+function fiCapInput(){
+  const c=fiCfg(), hoy=todayStr(), cp=FI.cp, cuentas=c.accounts.filter(a=>a.id!=="credito"), saldo=fiSum(cuentas,fiAcctBalance), pagos=[], keys=new Set(Object.keys(c.fuenteCortes).map(k=>k.toLowerCase()));
+  fiDebtsActive().forEach(d=>{ if(keys.has((d.fuente||"").trim().toLowerCase())) return;   // los meses sin intereses de una tarjeta ya van dentro del pago de esa tarjeta
+    const s=fiDebtStats(d), dia=Number((d.fechaInicio||hoy).slice(8))||1; pagos.push({concepto:"Deuda: "+(d.concepto||"deuda"),monto:s.pagoMensual,fecha:fiNextDay(dia,hoy)}); });
+  Object.keys(c.fuenteCortes).forEach(k=>{ const cd=fiCard(k); if(cd.pagoD&&cd.aPagar>0) pagos.push({concepto:"Tarjeta "+fiTitle(k),monto:fiR2(cd.aPagar),fecha:cd.pagoD}); });
+  const ingresos=[], pi=c.proximoIngreso;
+  if(pi&&pi.fecha&&pi.fecha>=hoy&&Number(pi.monto)>0) ingresos.push({concepto:"Ingreso confirmado",monto:Number(pi.monto),fecha:pi.fecha,estado:"confirmado"});
+  const pq=fiPlan("quincenal"), fq=fiHeroModel().q.endStr; if(pq.base>0&&fq>=hoy&&!ingresos.some(x=>x.fecha===fq)) ingresos.push({concepto:"Quincena estimada",monto:fiR2(pq.base),fecha:fq,estado:"esperado"});
+  const esencial=Math.max(fiConsumoProm()/30,fiGastosAprox("mensual")/30), pM=fiPlan("mensual");
+  return {hoy,saldoLiquido:fiR2(saldo),reservas:[],pagos,ingresos,gastoEsencialDiario:fiR2(esencial),reservaSeguridad:Number(c.reservaSeguridad)||0,
+    ingresoMensualBase:pM.base,obligacionesMensuales:fiR2(fiDeudaMensual()),esencialMensual:fiR2(esencial*30),
+    fondoEmergencia:Number(c.fondoMeta)>0?{actual:fiFondo(),meta:Number(c.fondoMeta)}:null,
+    precio:Number(cp.precio)||0,fecha:cp.fecha||hoy,tipo:cp.tipo,pago:cp.pago,credito:cp.pago==="credito"?{meses:Number(cp.meses)||1,tasaAnual:Number(cp.tasa)||0}:null,puedeEsperar:!!cp.esperar};
 }
-function fiSimCard(){
-  const cards=Object.keys(fiCfg().fuenteCortes);
-  return `<div class="fi-card-head"><h3>¿Me conviene comprarlo?</h3><span class="hint">prueba antes de gastar</span></div>
-    <div class="form-grid g3"><div><label class="mini">Precio</label><input class="inp" id="fs-monto" type="number" inputmode="decimal" min="0" step="50" placeholder="$0" value="${esc(FI.sim.monto)}" data-action="fi-sim"></div>
-      <div><label class="mini">Pago</label><select class="inp" id="fs-meses" data-action="fi-sim">${[[1,"De contado"],[3,"3 meses"],[6,"6 meses"],[9,"9 meses"],[12,"12 meses"],[18,"18 meses"],[24,"24 meses"]].map(([v,l])=>`<option value="${v}" ${String(FI.sim.meses)===String(v)?"selected":""}>${l}</option>`).join("")}</select></div>
-      <div><label class="mini">Tarjeta</label><select class="inp" id="fs-tarjeta" data-action="fi-sim"><option value="">Ninguna</option>${cards.map(k=>`<option value="${esc(k)}" ${FI.sim.tarjeta===k?"selected":""}>${esc(fiTitle(k))}</option>`).join("")}</select></div></div>
-    <div id="fs-result" style="margin-top:12px">${fiSimHtml()}</div>`;
+function fiCompraHtml(){
+  const I=fiCapInput();
+  if(!(I.precio>0)) return `<p class="hint">Escribe cuánto cuesta y te digo si puedes pagarlo sin quedarte corto antes de tu siguiente ingreso.</p>`;
+  const r=CAP.compra(I); if(r.error) return `<p class="hint">${esc(r.error)}</p>`;
+  const cls={VIABLE:"ok",CONDICIONES:"justo",ESPERAR:"justo",NO:"no"}[r.veredicto], f=n=>fiFmt(n);
+  const fila=(k,v)=>`<tr><td>${k}</td><td class="num">${v}</td></tr>`;
+  const pagosTxt=r.pagosDetalle.length?r.pagosDetalle.map(x=>`${esc(x.concepto)} (${fmtCorto(x.fecha)}): ${f(x.monto)}`).join("<br>"):"ninguno antes de tu siguiente ingreso";
+  return `<div class="fi-verdict ${cls}"><b>${esc(r.titulo)}${r.provisional?" · provisional":""}</b>
+    <table class="fi-cap"><tbody>${fila("Saldo actual (sin tarjetas)",f(r.saldoActual))}${fila("Dinero reservado",f(r.reservado))}
+      ${fila("Próximos pagos",pagosTxt)}${fila("Gasto esencial hasta tu siguiente ingreso",f(r.esencialHastaIngreso))}
+      ${fila("Disponible antes de la compra",f(r.disponibleAntes))}${fila("Disponible después",`<b>${f(r.disponibleDespues)}</b>`)}
+      ${fila("Días hasta tu siguiente ingreso confirmado",r.diasHastaIngreso==null?"sin ingreso confirmado":r.diasHastaIngreso)}
+      ${r.credito?fila("Si es a crédito",`${f(r.credito.cuota)} al mes · total ${f(r.credito.total)} · intereses ${f(r.credito.intereses)}`):""}
+      ${r.margenMensual?fila("Margen mensual después de la cuota",`${f(r.margenMensual.despues)} (tus pagos serían ${r.margenMensual.carga}% de tu ingreso)`):""}</tbody></table>
+    ${r.riesgos.length?`<p class="fi-cap-t">Riesgos</p><ul>${r.riesgos.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
+    <p class="fi-cap-t">Qué haría</p><p style="margin:0">${esc(r.alternativa)}</p>
+    ${r.fechaViable&&r.veredicto!=="VIABLE"?`<p class="hint" style="margin:6px 0 0">Fecha en que sí cabría con colchón: <b>${fmtCorto(r.fechaViable)}</b></p>`:""}</div>
+    <p class="hint">Es una cuenta con tus datos registrados, no asesoría financiera profesional. Calculado el ${fmtCorto(I.hoy)}; lo estimado se marca como provisional.</p>`;
+}
+function fiCompraCard(){
+  const cp=FI.cp, pi=fiCfg().proximoIngreso||{}, credito=cp.pago==="credito";
+  return `<div class="fi-card-head"><h3>¿Me lo puedo comprar?</h3><span class="hint">antes de gastar</span></div>
+    <div class="form-grid g3"><div><label class="mini">Precio</label><input class="inp" id="fcp-precio" type="number" inputmode="decimal" min="0" step="50" placeholder="$0" value="${esc(cp.precio)}" data-action="fi-cp"></div>
+      <div><label class="mini">Cuándo la compras</label><input class="inp" id="fcp-fecha" type="date" value="${esc(cp.fecha)}" min="${todayStr()}" data-action="fi-cp"></div>
+      <div><label class="mini">Es…</label><select class="inp" id="fcp-tipo" data-action="fi-cp">${[["necesidad","Una necesidad"],["gusto","Un gusto"],["inversion","Una inversión"]].map(([v,l])=>`<option value="${v}" ${cp.tipo===v?"selected":""}>${l}</option>`).join("")}</select></div>
+      <div><label class="mini">Pago</label><select class="inp" id="fcp-pago" data-action="fi-cp"><option value="contado" ${credito?"":"selected"}>De contado</option><option value="credito" ${credito?"selected":""}>A meses / crédito</option></select></div>
+      ${credito?`<div><label class="mini">Meses</label><select class="inp" id="fcp-meses" data-action="fi-cp">${[3,6,9,12,18,24,36].map(m=>`<option ${String(cp.meses)===String(m)?"selected":""}>${m}</option>`).join("")}</select></div>
+      <div><label class="mini">Tasa anual % (0 si es sin intereses)</label><input class="inp" id="fcp-tasa" type="number" inputmode="decimal" min="0" step="0.1" value="${esc(cp.tasa)}" data-action="fi-cp"></div>`:""}
+      <div><label class="mini">¿Puede esperar?</label><select class="inp" id="fcp-esperar" data-action="fi-cp"><option value="1" ${cp.esperar?"selected":""}>Sí</option><option value="0" ${cp.esperar?"":"selected"}>No</option></select></div></div>
+    <details class="fi-det" ${pi.fecha?"open":""}><summary>Mi siguiente ingreso confirmado (mejora la respuesta)</summary>
+      <div class="form-grid g3"><div><label class="mini">Fecha</label><input class="inp" type="date" value="${esc(pi.fecha||"")}" min="${todayStr()}" data-action="fi-cp-ing" data-field="fecha"></div>
+      <div><label class="mini">Monto</label><input class="inp" type="number" inputmode="decimal" min="0" step="50" value="${esc(pi.monto||"")}" data-action="fi-cp-ing" data-field="monto"></div>
+      <div><label class="mini">Reserva de seguridad $</label><input class="inp" type="number" inputmode="decimal" min="0" step="100" value="${esc(fiCfg().reservaSeguridad||"")}" data-action="fi-cp-ing" data-field="reservaSeguridad"></div></div>
+      <p class="hint" style="margin:4px 0 0">Sin un ingreso confirmado, la respuesta es provisional: no cuento el dinero que solo esperas.</p></details>
+    <div id="fcp-result" style="margin-top:12px">${fiCompraHtml()}</div>`;
+}
+/* Estrategia de deudas: avalancha vs bola de nieve con tus deudas reales */
+function fiEstrategiaHtml(){
+  const c=fiCfg(), act=fiDebtsActive();
+  if(!act.length) return `<p class="hint">Sin deudas activas: no hay nada que ordenar.</p>`;
+  const deudas=act.map(d=>{ const s=fiDebtStats(d); return {id:d.id,nombre:(d.concepto||"deuda")+(d.fuente?" · "+fiTitle(d.fuente):""),saldo:s.saldo,tasaAnual:d.tasa!=null&&d.tasa!==""?Number(d.tasa):null,pagoMinimo:s.pagoMensual}; });
+  const extra=Number(c.extraDeuda)||0, E=CAP.estrategiaDeudas(deudas,extra), f=fiFmt, nombre=r=>r.orden.map(o=>`${esc(o.nombre)} (mes ${o.mes})`).join(" → ")||"—";
+  const col=(t,r,desc)=>`<div class="fi-item"><b>${t}</b><p class="hint" style="margin:2px 0 6px">${desc}</p>${r.noAmortiza?`<p>Con estos pagos no se liquida en 50 años: sube el pago.</p>`:`<div class="num fi-big">${r.meses} ${fiPl(r.meses,"mes","meses")}</div><div class="hint" style="margin:0">intereses: <b>${f(r.intereses)}</b></div><div class="hint" style="margin:6px 0 0">Orden: ${nombre(r)}</div>`}</div>`;
+  const nota=[]; if(E.sinTasa.length) nota.push(`Sin tasa registrada (cuento 0%): ${E.sinTasa.map(esc).join(", ")}. Ponla en la deuda para que la comparación sea real.`);
+  if(E.ahorroIntereses!=null) nota.push(E.ahorroIntereses>0.5?`La avalancha te ahorra ${f(E.ahorroIntereses)} en intereses frente a la bola de nieve.`:"Con tus tasas, las dos estrategias cuestan casi lo mismo: elige la que te motive más (bola de nieve libera deudas antes).");
+  return `<div class="fi-grid2">${col("Avalancha",E.avalancha,"Primero la deuda más cara (mayor tasa): paga menos intereses.")}${col("Bola de nieve",E.bola,"Primero la más pequeña: liberas pagos y ganas impulso.")}</div>
+    ${nota.length?`<ul class="hint" style="margin:8px 0 0">${nota.map(x=>`<li>${x}</li>`).join("")}</ul>`:""}
+    <p class="hint">Siempre pagas el mínimo de todas; lo extra va a la deuda objetivo. Nunca dejes de pagar un mínimo.</p>`;
+}
+function fiEstrategiaCard(){
+  const c=fiCfg();
+  return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>¿Qué deuda pago primero?</h3><span class="hint">avalancha vs bola de nieve</span></div>
+    <div class="form-grid g3"><div><label class="mini">Extra al mes que puedes poner $</label><input class="inp" id="fe-extra" type="number" inputmode="decimal" min="0" step="100" value="${esc(c.extraDeuda||"")}" placeholder="0" data-action="fi-extra"></div></div>
+    <div id="fe-result" style="margin-top:10px">${fiEstrategiaHtml()}</div></div></section>`;
+}
+/* Patrimonio neto y proyección del saldo */
+function fiPatrimonioCard(){
+  const c=fiCfg(), cuentas=c.accounts.filter(a=>a.id!=="credito").map(a=>({nombre:a.name,valor:fiAcctBalance(a)})), activos=cuentas.filter(x=>x.valor>0).concat([{nombre:"Fondo de emergencia apartado",valor:fiFondo()}]);
+  const sobregiro=cuentas.filter(x=>x.valor<0).map(x=>({nombre:"Sobregiro en "+x.nombre,valor:-x.valor}));   // una cuenta en negativo es una deuda, no un activo
+  const pasivos=sobregiro.concat(fiDebtsActive().map(d=>({nombre:d.concepto||"deuda",valor:fiDebtStats(d).saldo}))).concat(Object.keys(c.fuenteCortes).map(k=>({nombre:"Saldo de "+fiTitle(k),valor:fiCard(k).saldo})));
+  const P=CAP.patrimonio(activos,pasivos), I=fiCapInput(), pr=CAP.proyeccion(I,30), f=fiFmt, sc=[["conservador","Conservador","solo ingresos confirmados"],["base","Base","confirmados y 70% de lo esperado"],["optimista","Optimista","todo lo esperado"]];
+  return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Patrimonio y próximos 30 días</h3><span class="hint">activos − pasivos</span></div>
+    <div class="fi-grid2"><div class="fi-item"><div class="hint" style="margin:0">Patrimonio neto</div><div class="num fi-big" style="color:${P.neto<0?"var(--danger)":"var(--ink)"}">${f(P.neto)}</div><div class="hint" style="margin:0">tienes ${f(P.activos)} · debes ${f(P.pasivos)}</div></div>
+    <div class="fi-item"><div class="hint" style="margin:0">Saldo dentro de 30 días</div>${sc.map(([k,n,d])=>`<div class="fi-item-meta"><span>${n} <small class="muted">${d}</small></span><b class="num" style="color:${pr[k].final<0?"var(--danger)":"var(--ink)"}">${f(pr[k].final)}</b></div>`).join("")}</div></div>
+    ${pr.conservador.diasNegativos>0?`<div class="fi-notice warn"><span>En el escenario conservador tu saldo queda en negativo ${pr.conservador.diasNegativos} ${fiPl(pr.conservador.diasNegativos,"día","días")} (el punto más bajo es ${f(pr.conservador.minimo)} el ${fmtCorto(pr.conservador.fechaMinimo)}).</span></div>`:""}
+    <p class="hint">Es una estimación con tus datos: el gasto diario sale de tu consumo reciente y no se garantiza. El patrimonio solo suma lo que tiene valor registrado (cuentas, fondo y deudas).</p></div></section>`;
 }
 
 /* ---------- DEUDAS ---------- */
@@ -501,7 +698,7 @@ function fiViewDeudas(){
     ${aviso}<div class="tiles tiles-3" style="margin-top:14px"><div class="tile"><div class="label">Debes en total</div><div class="value num" style="color:var(--danger)">${fiFmt(fiSaldoDeudas())}</div></div>
       <div class="tile"><div class="label">Pagos al mes</div><div class="value num">${fiFmt(deudaMes)}</div><div class="foot">${dti==null?"":`<span style="color:${dc}">${fiPct(dti)}</span> de tu ingreso`}</div></div>
       <div class="tile"><div class="label">Libre de deudas en</div><div class="value num">${libre}</div><div class="foot">${esc(libreSub)}</div></div></div>
-    <div class="grid-cards" style="margin-top:14px">${D.length?cards:`<p class="hint">Sin deudas registradas. Agrega una con “+ Nueva deuda”.</p>`}</div>${strat?`<p class="hint" style="margin-top:12px">${strat}</p>`:""}</section>${fiCortesBlk()}`;
+    <div class="grid-cards" style="margin-top:14px">${D.length?cards:`<p class="hint">Sin deudas registradas. Agrega una con “+ Nueva deuda”.</p>`}</div>${strat?`<p class="hint" style="margin-top:12px">${strat}</p>`:""}</section>${fiEstrategiaCard()}${fiCortesBlk()}`;
 }
 function fiCortesBlk(){
   const keys=Object.keys(fiCfg().fuenteCortes);
@@ -614,7 +811,7 @@ function fiLedger(){
 }
 
 /* ---------- CRECER ---------- */
-function fiViewCrecer(){ return fiFondo_()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
+function fiViewCrecer(){ return fiPatrimonioCard()+fiFondo_()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
 function fiFlWhatHtml(){
   const s=fiFlStats(), n=Number(FI.flN)||0, m=Number(FI.flMonto)||s.prom||0, pM=fiPlan("mensual");
   if(!(m>0)) return `<p class="hint">Pon el monto de un proyecto (por ejemplo lo que sueles cotizar) para ver cuánto sumaría.</p>`;
@@ -811,7 +1008,7 @@ function fiClick(a,t){
 /* escribir sin redibujar (no perder el foco) */
 function fiInput(a,t){
   if(a==="fi-search"){ FI.filter=t.value; const l=document.getElementById("fl-list"), n=document.getElementById("fl-count"); if(l) l.innerHTML=fiLedgerHtml(); if(n) n.textContent=fiLedgerRows().length+" movimientos"; return true; }
-  if(a==="fi-sim"){ FI.sim={monto:fiV("fs-monto"),meses:fiV("fs-meses"),tarjeta:fiV("fs-tarjeta")}; const r=document.getElementById("fs-result"); if(r) r.innerHTML=fiSimHtml(); return true; }
+  if(a==="fi-cp"){ const antes=FI.cp.pago; FI.cp={precio:fiV("fcp-precio"),fecha:fiV("fcp-fecha"),tipo:fiV("fcp-tipo")||"gusto",pago:fiV("fcp-pago")||"contado",meses:fiV("fcp-meses")||FI.cp.meses,tasa:fiV("fcp-tasa")||(document.getElementById("fcp-tasa")?"0":FI.cp.tasa),esperar:fiV("fcp-esperar")!=="0"}; if(antes!==FI.cp.pago){ render(); return true; } const r=document.getElementById("fcp-result"); if(r) r.innerHTML=fiCompraHtml(); return true; }
   if(a==="fi-whatif"){ FI.whatif=t.value; const r=document.getElementById("fw-result"); if(r) r.innerHTML=fiWhatIfHtml(); return true; }
   if(a==="fi-flwhat"){ FI.flN=fiV("fl-n"); FI.flMonto=fiV("fl-m"); const r=document.getElementById("fl-result"); if(r) r.innerHTML=fiFlWhatHtml(); return true; }
   return a.startsWith("fi-");
@@ -819,6 +1016,8 @@ function fiInput(a,t){
 /* confirmar un campo (al salir o dar Enter): se guarda y se redibuja */
 function fiChange(a,t){
   const c=fiCfg();
+  if(a==="fi-cp-ing"){ const f=t.dataset.field; if(f==="reservaSeguridad") c.reservaSeguridad=Math.max(0,Number(t.value)||0); else { c.proximoIngreso=c.proximoIngreso||{}; c.proximoIngreso[f]=f==="monto"?Math.max(0,Number(t.value)||0):t.value; } touch(); const r=document.getElementById("fcp-result"); if(r) r.innerHTML=fiCompraHtml(); return true; }
+  if(a==="fi-extra"){ fiSet({extraDeuda:Math.max(0,Number(t.value)||0)}); return true; }
   if(a==="fi-plan-ingreso"){ const v=Math.max(0,Number(t.value)||0); fiSet({[FI.planPeriod==="quincenal"?"ingresoQuincenalManual":"ingresoMensualManual"]:v},"Ingreso actualizado"); return true; }
   if(a==="fi-plan-pct"){ fiSet({metaAhorroPct:fiClamp(Number(t.value)||0,0,100)},"Meta de ahorro actualizada"); return true; }
   if(a==="fi-corte-field"){
