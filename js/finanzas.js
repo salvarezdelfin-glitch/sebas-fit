@@ -31,6 +31,7 @@ function fiCfg(){
   if(!c.budgets||typeof c.budgets!=="object") c.budgets={};
   if(!c.fuenteCortes||typeof c.fuenteCortes!=="object") c.fuenteCortes={};
   if(!Array.isArray(c.gastosFijos)) c.gastosFijos=[];
+  if(!Array.isArray(c.apartados)) c.apartados=[];
   return c;
 }
 function fiSet(patch,msg){ Object.assign(fiCfg(),patch); touch(); render(); if(msg) toast(msg); }
@@ -86,11 +87,14 @@ const CAP=(()=>{
     const dHasta=Math.max(0,dias(hoy,fecha));
     const saldoFecha=saldo0+suma(ing.filter(x=>x.fecha>=hoy&&x.fecha<=fecha),x=>c(x.monto))-suma(pag.filter(x=>x.fecha>=hoy&&x.fecha<=fecha),x=>c(x.monto))-esc*dHasta;
     const prox=ing.filter(x=>x.fecha>fecha).sort((a,b)=>a.fecha.localeCompare(b.fecha))[0];
+    const est=(I.ingresos||[]).filter(x=>x.estado==="esperado"&&x.fecha>fecha).sort((a,b)=>a.fecha.localeCompare(b.fecha))[0];
     const provisional=[]; let H;
-    if(prox){ H=prox.fecha; } else { H=sumar(fecha,30); provisional.push("No hay un próximo ingreso confirmado: calculé los siguientes 30 días sin contar ingresos."); }
+    if(prox){ H=prox.fecha; }
+    else if(est){ H=est.fecha; provisional.push("Tu próximo ingreso ("+est.fecha+") es una estimación, no un depósito confirmado: si se retrasa, te faltaría. Confírmalo para una respuesta firme."); }   // el ingreso no se suma; solo define hasta cuándo hay que aguantar
+    else { H=sumar(fecha,30); provisional.push("No hay un próximo ingreso confirmado: calculé los siguientes 30 días sin contar ingresos."); }
     const dH=dias(fecha,H), esenH=esc*dH, pagH=pag.filter(x=>x.fecha>fecha&&x.fecha<=H), pagosH=suma(pagH,x=>c(x.monto)), reservas=suma(I.reservas||[],x=>c(x.monto));
     const antes=saldoFecha-reservas-pagosH-esenH-seg;
-    return {fecha,H,diasHastaIngreso:prox?dH:null,saldoFecha,reservas,pagosH,pagH,esenH,seg,antes,provisional,proximoIngreso:prox||null};
+    return {fecha,H,diasHastaIngreso:(prox||est)?dH:null,ingresoEstimado:!prox&&!!est,saldoFecha,reservas,pagosH,pagH,esenH,seg,antes,provisional,proximoIngreso:prox||est||null};
   }
   function disponible(I){ const r=disponibleEn(I,I.hoy); return {saldo:p(c(I.saldoLiquido)),reservado:p(r.reservas),pagos:p(r.pagosH),esencial:p(r.esenH),seguridad:p(r.seg),disponible:p(r.antes),diasHastaIngreso:r.diasHastaIngreso,hasta:r.H,provisional:r.provisional}; }
 
@@ -148,7 +152,7 @@ const CAP=(()=>{
     return {veredicto:v,titulo:VEREDICTOS[v],provisional:provis,fecha,
       saldoActual:p(c(I.saldoLiquido)),reservado:p(base.reservas),proximosPagos:p(base.pagosH),pagosDetalle:base.pagH.map(x=>({concepto:x.concepto,monto:x.monto,fecha:x.fecha})),
       esencialHastaIngreso:p(base.esenH),disponibleAntes:p(base.antes),disponibleDespues:p(despues),colchon:p(colchon),
-      diasHastaIngreso:base.diasHastaIngreso,proximoIngreso:base.proximoIngreso,credito:cu,margenMensual:margen,
+      diasHastaIngreso:base.diasHastaIngreso,ingresoEstimado:base.ingresoEstimado,proximoIngreso:base.proximoIngreso,credito:cu,margenMensual:margen,
       riesgos,faltan,alternativa,fechaViable};
   }
 
@@ -211,7 +215,7 @@ const fiIsConsumo=t=>t.type==="expense"&&t.categoryId!=="ahorro"&&t.categoryId!=
 const fiTx=()=>FI_D().tx;
 const fiTxIn=(a,b)=>fiTx().filter(t=>t.date>=a&&t.date<=b);
 const fiConsumoIn=(a,b)=>fiSum(fiTxIn(a,b).filter(fiIsConsumo),t=>t.amount);
-const fiFondo=()=>fiSum(fiTx().filter(t=>t.type==="expense"&&t.categoryId==="ahorro"),t=>t.amount);
+const fiFondo=()=>fiSum(fiTx().filter(t=>t.type==="expense"&&t.categoryId==="ahorro"&&!t.goalId),t=>t.amount);
 
 /* Ingresos: lo que das (clases confirmadas) o lo que cobras (cobros marcados), + clientes PT + lo que anotes a mano */
 function fiBasis(){ return fiCfg().baseIngreso==="cobrado"?"cobrado":"devengado"; }
@@ -458,6 +462,45 @@ function fiHero(){
     <div class="fi-hero-foot"><span>Gastado ${fiFmt(h.gastado)} de ${fiFmt(Math.max(0,p.gasto))} · quincena ${fiQLabel(h.q)}</span><span>${p.base>0?`Base ${fiFmt(p.base)} − deudas ${fiFmt(p.deudas)} − ahorro ${fiFmt(p.ahorro)}`:""}</span></div></div></section>`;
 }
 
+/* ---------- APARTADOS: dinero para fechas y metas (Japón, aniversario…) para no endeudarte cuando lleguen ---------- */
+const FI_AP_SUG=["Viaje a Japón","Aniversario","Cumpleaños","Navidad","Vacaciones","Regalos","Fin de año","Laptop o equipo"];
+function fiApartados(){
+  const hoy=todayStr(), q=quincenaFor(hoy,0);
+  return fiCfg().apartados.map(a=>{
+    const tx=fiTx().filter(t=>t.goalId===a.id&&t.type==="expense"), saved=fiSum(tx,t=>t.amount), meta=Number(a.meta)||0, falta=Math.max(0,meta-saved);
+    const aportQ=fiSum(tx.filter(t=>t.date>=q.startStr&&t.date<=hoy),t=>t.amount), dias=a.fecha?fiDays(hoy,a.fecha):null;
+    const periodos=dias==null?null:Math.max(1,Math.ceil(dias/15));   // quincenas que le quedan, contando la actual
+    const reqQ=periodos?(falta+aportQ)/periodos:0, faltaQ=periodos&&falta>0?Math.max(0,reqQ-aportQ):0;
+    return {id:a.id,nombre:a.nombre||"Apartado",meta,fecha:a.fecha||"",saved,falta,dias,periodos,reqQ:falta>0||aportQ>0?reqQ:0,faltaQ,aportQ,perMes:reqQ*2,pc:meta>0?fiClamp(saved/meta*100,0,100):0,listo:meta>0&&falta<=0,vencido:dias!=null&&dias<=0&&falta>0};
+  });
+}
+const fiApQ=()=>fiSum(fiApartados().filter(a=>!a.listo&&a.periodos!=null),a=>a.reqQ);
+/* del ahorro de la quincena, lo que toca al fondo una vez cubiertos los apartados */
+function fiFondoQ(){
+  const q=quincenaFor(todayStr(),0), pQ=fiPlan("quincenal");
+  return {meta:Math.max(0,pQ.ahorro-fiApQ()),aport:fiSum(fiTxIn(q.startStr,todayStr()).filter(t=>t.type==="expense"&&t.categoryId==="ahorro"&&!t.goalId),t=>t.amount)};
+}
+function fiApartadosCard(){
+  const L=fiApartados(), pQ=fiPlan("quincenal"), apQ=fiApQ(), hoy=todayStr();
+  let aviso="";
+  if(L.length&&pQ.ahorro>0){ aviso=apQ>pQ.ahorro+.5?`<div class="fi-notice warn"><span><b>Tus apartados piden ${fiFmt(apQ)} por quincena y tu ahorro es ${fiFmt(pQ.ahorro)}.</b> Faltan ${fiFmt(apQ-pQ.ahorro)} por quincena: mueve alguna fecha, baja una meta o sube tu ahorro (y no pagues nada a meses por esto).</span></div>`
+      :apQ>0?`<p class="hint">Entre todos piden <b class="num">${fiFmt(apQ)}</b> por quincena (${fiFmt(apQ*2)} al mes). De tu ahorro de ${fiFmt(pQ.ahorro)} te quedan <b class="num">${fiFmt(pQ.ahorro-apQ)}</b> para el fondo de emergencia.</p>`:""; }
+  const items=L.map(a=>{
+    const fechaTxt=a.fecha?(a.vencido?"la fecha ya llegó":a.dias===0?"es hoy":`faltan ${a.dias} ${fiPl(a.dias,"día","días")} · ${fmtCorto(a.fecha)}`):"sin fecha: ponle una para calcular cuánto apartar";
+    return `<article class="fi-item ${a.listo?"paid":""}"><div class="fi-item-head"><b>${esc(a.nombre)}</b><button class="btn sm ghost" data-action="fi-ap-del" data-id="${esc(a.id)}" aria-label="Quitar">✕</button></div>
+      <div class="num fi-big">${fiFmt(a.saved)}<span class="hint" style="margin:0 0 0 6px"> de ${fiFmt(a.meta)}</span></div>
+      <div class="fi-meter thin"><i style="width:${a.pc}%;background:var(--ok)"></i></div>
+      <div class="hint" style="margin:0">${a.listo?"¡Listo! Ya tienes todo para esa fecha.":fechaTxt}</div>
+      ${!a.listo&&a.periodos!=null?`<div class="strong" style="margin:0">Aparta ${fiFmt(a.reqQ)} por quincena <span class="hint" style="margin:0">(≈ ${fiFmt(a.perMes)} al mes · ${a.periodos} ${fiPl(a.periodos,"quincena","quincenas")})</span></div>${a.faltaQ>=1?`<div class="hint" style="margin:0">Esta quincena te faltan ${fiFmt(Math.round(a.faltaQ))}</div>`:`<div class="hint" style="margin:0;color:var(--ok)">Esta quincena ya cumpliste</div>`}`:""}
+      ${a.listo?"":`<div class="fi-ap-act"><input class="inp" type="number" inputmode="decimal" min="0" step="50" id="fap-${esc(a.id)}" placeholder="${a.faltaQ>=1?Math.round(a.faltaQ):"$"}" aria-label="Monto a apartar"><button class="btn sm primary" data-action="fi-ap-aportar" data-id="${esc(a.id)}" data-sug="${Math.round(a.faltaQ)}">Aportar</button></div>`}
+      <details class="fi-more" data-det="ap-${esc(a.id)}" ${FI.open.has("ap-"+a.id)?"open":""}><summary>Editar meta y fecha</summary><div class="fi-mini"><span>Meta $</span><input class="inp" type="number" min="0" step="100" value="${a.meta||""}" data-action="fi-ap-edit" data-id="${esc(a.id)}" data-field="meta"><span>Fecha</span><input class="inp" type="date" style="width:150px" value="${esc(a.fecha)}" data-action="fi-ap-edit" data-id="${esc(a.id)}" data-field="fecha"></div></details></article>`; }).join("");
+  return `<section class="blk"><div class="blk-head"><div><h2>Mis apartados</h2><p>ahorra poco a poco para lo que viene y no te endeudes</p></div></div><div class="card">${aviso}
+    <div class="grid-cards" style="margin-top:${aviso?"12px":"0"}">${items||'<p class="hint" style="margin:0">Todavía no tienes apartados. Crea uno para tu viaje, tu aniversario, el cumpleaños de alguien… y te digo cuánto apartar cada quincena para llegar sin deudas.</p>'}</div>
+    <div class="fi-gf-row fi-gf-add" style="grid-template-columns:minmax(0,1.4fr) 110px 150px auto"><input class="inp" id="fap-n" list="fap-sug" placeholder="Japón, aniversario…"><datalist id="fap-sug">${FI_AP_SUG.map(x=>`<option value="${x}">`).join("")}</datalist>
+      <input class="inp" id="fap-m" type="number" inputmode="decimal" min="0" step="100" placeholder="Meta $"><input class="inp" id="fap-f" type="date" min="${hoy}"><button class="btn sm" data-action="fi-ap-add">+ Crear</button></div>
+    <p class="hint">Lo apartado no cuenta como dinero libre para gastar ni como fondo de emergencia. Se calcula con las quincenas que faltan hasta la fecha; si cambia tu ingreso, el monto se ajusta solo.</p></div></section>`;
+}
+
 /* ---------- TU PLAN, PASO A PASO + LO QUE TE DICE TU DINERO ---------- */
 function fiMesesLibre(){ const act=fiDebtsActive(); return act.length?Math.max(...act.map(d=>fiDebtStats(d).restantes)):0; }
 function fiPasosCard(){
@@ -472,8 +515,10 @@ function fiPasosCard(){
   fiDebtsActive().filter(d=>!keys.has((d.fuente||"").trim().toLowerCase())).forEach(d=>{ const st=fiDebtStats(d);
     pasos.push({d:99,t:`Paga ${esc(d.concepto||"deuda")}: ${fiFmt(Math.min(st.pagoMensual,st.saldo))} este mes`,s:`${esc(d.fuente||"")} · faltan ${st.restantes} ${fiPl(st.restantes,"pago","pagos")}`,btn:`<button class="btn sm" data-action="fi-debt-pay" data-id="${esc(d.id)}">Ya lo pagué</button>`}); });
   // 3) ahorro al fondo
-  const q=h.q, aportQ=fiSum(fiTxIn(q.startStr,hoy).filter(t=>t.type==="expense"&&t.categoryId==="ahorro"),t=>t.amount), faltaAh=Math.max(0,p.ahorro-aportQ);
-  if(p.ahorro>0) pasos.push({d:98,t:faltaAh>=1?`Aparta ${fiFmt(Math.round(faltaAh))} a tu fondo de emergencia`:"Fondo de emergencia: listo esta quincena",s:faltaAh>=1?`lo primero cuando cobres, antes de gastar`:`ya llevas ${fiFmt(aportQ)}`,btn:faltaAh>=1?`<button class="btn sm" data-action="fi-fondo-quick" data-monto="${Math.round(faltaAh)}">Ya aparté</button>`:"",ok:faltaAh<1});
+  const q=h.q, FQ=fiFondoQ(), aportQ=FQ.aport, faltaAh=Math.max(0,FQ.meta-aportQ);
+  const AP=fiApartados().filter(a=>!a.listo&&a.periodos!=null), apTot=fiSum(AP,a=>a.faltaQ);
+  if(AP.length) pasos.push({d:97,t:apTot>=1?`Aparta ${fiFmt(Math.round(apTot))} a tus apartados`:"Apartados: listos esta quincena",s:AP.map(a=>`${esc(a.nombre)} ${fiFmt(Math.round(a.faltaQ))}`).join(" · "),btn:apTot>=1?`<button class="btn sm" data-action="fi-ap-todos">Ya aparté</button>`:"",ok:apTot<1});
+  if(FQ.meta>0) pasos.push({d:98,t:faltaAh>=1?`Aparta ${fiFmt(Math.round(faltaAh))} a tu fondo de emergencia`:"Fondo de emergencia: listo esta quincena",s:faltaAh>=1?`lo primero cuando cobres, antes de gastar`:`ya llevas ${fiFmt(aportQ)}`,btn:faltaAh>=1?`<button class="btn sm" data-action="fi-fondo-quick" data-monto="${Math.round(faltaAh)}">Ya aparté</button>`:"",ok:faltaAh<1});
   // 4) gastar
   pasos.push({d:100,t:h.restante>0?`Gasta máximo ${fiFmt(h.restante)} hasta el ${fmtCorto(qEnd)}`:"Ya no te queda para gastar esta quincena",s:h.restante>0?`unos ${fiFmt(Math.floor(h.porDia))} al día · lo demás ya tiene dueño`:"solo lo esencial hasta que cobres",warn:h.restante<=0});
   pasos.sort((a,b)=>a.d-b.d);
@@ -492,6 +537,8 @@ function fiResumenCard(){
   const esencial=deudaMes+(G>0?G:fiConsumoProm()), meta=Number(c.fondoMeta||0)||Math.round(esencial*3/100)*100, ah=fiFondo();
   if(esencial>0&&pM.ahorro>0){ const falta=Math.max(0,meta-ah), mm=falta/pM.ahorro;
     L.push(falta<=0?`Tu fondo de emergencia ya cubre 3 meses. Mantenlo y ahorra para lo que quieras.`:`Tu fondo de emergencia ideal son <b>${fiFmt(meta)}</b> (3 meses de lo esencial); llevas ${fiFmt(ah)}. Apartando ${fiFmt(pM.ahorro)} al mes lo logras en <b>~${Math.ceil(mm)} ${fiPl(Math.ceil(mm),"mes","meses")}</b>.`); }
+  const APL=fiApartados().filter(a=>!a.listo&&a.periodos!=null);
+  if(APL.length) L.push(`Tus apartados (${APL.map(a=>esc(a.nombre)).join(", ")}) piden <b>${fiFmt(fiApQ()*2)} al mes</b>: así llegas a esas fechas con el dinero ya listo, sin tarjeta ni deuda.`);
   const ins=fiDiag().insights.filter(i=>i.sev>=2)[0];
   if(ins) L.push(`Lo más importante ahora: <b>${esc(ins.t)}.</b> ${esc(ins.p)}`);
   return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Lo que te dice tu dinero</h3><span class="hint">orientación general, no es asesoría financiera</span></div><ul class="fi-resumen">${L.map(x=>"<li>"+x+"</li>").join("")}</ul></div></section>`;
@@ -502,7 +549,7 @@ const FI_GF_SUG=["Comida","Súper","Transporte / gasolina","Celular e internet",
 function fiGastosCard(){
   const c=fiCfg(), L=c.gastosFijos, p=fiPlan(FI.planPeriod==="mensual"?"mensual":"quincenal"), per=p.period==="mensual"?"mes":"quincena";
   const ah=fiFondo(), meta=Number(c.fondoMeta||0), q=quincenaFor(todayStr(),0), pQ=fiPlan("quincenal");
-  const aportQ=fiSum(fiTxIn(q.startStr,todayStr()).filter(t=>t.type==="expense"&&t.categoryId==="ahorro"),t=>t.amount), falta=Math.max(0,pQ.ahorro-aportQ);
+  const FQ=fiFondoQ(), aportQ=FQ.aport, falta=Math.max(0,FQ.meta-aportQ);
   const rows=L.map(g=>`<div class="fi-gf-row"><input class="inp" value="${esc(g.nombre||"")}" placeholder="¿En qué?" data-action="fi-gf-edit" data-id="${esc(g.id)}" data-field="nombre" aria-label="Concepto">
     <input class="inp" type="number" inputmode="decimal" min="0" step="50" value="${g.monto||""}" placeholder="$0" data-action="fi-gf-edit" data-id="${esc(g.id)}" data-field="monto" aria-label="Monto aproximado">
     <select class="inp" data-action="fi-gf-edit" data-id="${esc(g.id)}" data-field="freq" aria-label="Cada cuándo"><option value="q" ${g.freq!=="mes"?"selected":""}>por quincena</option><option value="mes" ${g.freq==="mes"?"selected":""}>por mes</option></select>
@@ -516,9 +563,9 @@ function fiGastosCard(){
     else veredicto=`<div class="fi-verdict ok"><b>Aparta ${fiFmt(p.ahorro)} por ${per}, siempre</b><ul><li>Gastas ~${fiFmt(p.G)} de siempre y te quedan ${fiFmt(Math.max(0,p.gasto-p.G))} de colchón para imprevistos.</li></ul></div>`;
     veredicto+=p.ahorro>0?`<p class="hint">Regla simple que sube y baja con tus ingresos: de cada $100 que te entran, aparta <b class="num">${fiFmt(por100)}</b> en cuanto cobres.</p>`:"";
   }
-  const fondo=`<div class="fi-gf-fondo"><div><span class="eyebrow">Todo el ahorro va al fondo de emergencia</span><div class="hint" style="margin:2px 0 0">${fiFmt(ah)}${meta>0?" de "+fiFmt(meta):" ahorrados"}${pQ.ahorro>0?` · esta quincena llevas ${fiFmt(aportQ)} de ${fiFmt(pQ.ahorro)}`:""}</div>
+  const fondo=`<div class="fi-gf-fondo"><div><span class="eyebrow">Todo el ahorro va al fondo de emergencia</span><div class="hint" style="margin:2px 0 0">${fiFmt(ah)}${meta>0?" de "+fiFmt(meta):" ahorrados"}${FQ.meta>0?` · esta quincena llevas ${fiFmt(aportQ)} de ${fiFmt(FQ.meta)}`:""}</div>
     ${meta>0?`<div class="fi-meter thin" style="margin-top:6px"><i style="width:${fiClamp(ah/meta*100,0,100)}%;background:var(--ok)"></i></div>`:""}</div>
-    ${falta>=1?`<button class="btn primary sm" data-action="fi-fondo-quick" data-monto="${Math.round(falta)}">Ya aparté ${fiFmt(Math.round(falta))}</button>`:(pQ.ahorro>0?'<span class="chip ok">cumplido</span>':"")}</div>`;
+    ${falta>=1?`<button class="btn primary sm" data-action="fi-fondo-quick" data-monto="${Math.round(falta)}">Ya aparté ${fiFmt(Math.round(falta))}</button>`:(FQ.meta>0?'<span class="chip ok">cumplido</span>':"")}</div>`;
   return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Mis gastos de siempre</h3><span class="hint">aproximados · el ahorro se calcula con ellos</span></div>
     <div class="fi-gf">${rows||'<p class="hint" style="margin-top:0">Todavía no anotas nada. Pon lo que gastas más o menos, sin exactitud.</p>'}</div>
     <div class="fi-gf-row fi-gf-add"><input class="inp" id="fg-n" list="fg-sug" placeholder="Comida, transporte…"><datalist id="fg-sug">${FI_GF_SUG.map(x=>`<option value="${x}">`).join("")}</datalist>
@@ -701,7 +748,7 @@ function fiCompraHtml(){
     <table class="fi-cap"><tbody>${fila("Saldo actual (sin tarjetas)",f(r.saldoActual))}${fila("Dinero reservado",f(r.reservado))}
       ${fila("Próximos pagos",pagosTxt)}${fila("Gasto esencial hasta tu siguiente ingreso",f(r.esencialHastaIngreso))}
       ${fila("Disponible antes de la compra",f(r.disponibleAntes))}${fila("Disponible después",`<b>${f(r.disponibleDespues)}</b>`)}
-      ${fila("Días hasta tu siguiente ingreso confirmado",r.diasHastaIngreso==null?"sin ingreso confirmado":r.diasHastaIngreso)}
+      ${fila("Días hasta tu siguiente ingreso",r.diasHastaIngreso==null?"sin ingreso a la vista":r.diasHastaIngreso+(r.ingresoEstimado?" (estimado)":""))}
       ${r.credito?fila("Si es a crédito",`${f(r.credito.cuota)} al mes · total ${f(r.credito.total)} · intereses ${f(r.credito.intereses)}`):""}
       ${r.margenMensual?fila("Margen mensual después de la cuota",`${f(r.margenMensual.despues)} (tus pagos serían ${r.margenMensual.carga}% de tu ingreso)`):""}</tbody></table>
     ${r.riesgos.length?`<p class="fi-cap-t">Riesgos</p><ul>${r.riesgos.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
@@ -896,7 +943,7 @@ function fiLedger(){
 }
 
 /* ---------- CRECER ---------- */
-function fiViewCrecer(){ return fiPatrimonioCard()+fiFondo_()+fiInvertirCard()+fiEscCard()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
+function fiViewCrecer(){ return fiPatrimonioCard()+fiApartadosCard()+fiFondo_()+fiInvertirCard()+fiEscCard()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
 function fiFlWhatHtml(){
   const s=fiFlStats(), n=Number(FI.flN)||0, m=Number(FI.flMonto)||s.prom||0, pM=fiPlan("mensual");
   if(!(m>0)) return `<p class="hint">Pon el monto de un proyecto (por ejemplo lo que sueles cotizar) para ver cuánto sumaría.</p>`;
@@ -922,13 +969,13 @@ function fiFreelanceBlk(){
 function fiFondo_(){
   const c=fiCfg(), ah=fiFondo(), meta=Number(c.fondoMeta||0), esencial=fiDeudaMensual()+fiConsumoProm(), sug=Math.round(esencial*3/100)*100;
   const meses=esencial>0?ah/esencial:null, pc=meta>0?fiClamp(ah/meta*100,0,100):0, pQ=fiPlan("quincenal"), q=quincenaFor(todayStr(),0);
-  const aportQ=fiSum(fiTxIn(q.startStr,todayStr()).filter(t=>t.type==="expense"&&t.categoryId==="ahorro"),t=>t.amount);
+  const FQ=fiFondoQ(), aportQ=FQ.aport;
   return `<section class="blk"><div class="blk-head"><div><h2>Fondo de emergencia</h2><p>tu colchón si algo sale mal</p></div></div><div class="card">
     <div class="fi-fondo-top"><div class="num fi-big2">${fiFmt(ah)}<span class="hint" style="margin:0 0 0 6px"> ${meta>0?"de "+fiFmt(meta):"ahorrados"}</span></div><label class="hint" style="display:flex;align-items:center;gap:6px;margin:0">meta $ <input class="inp fi-sm" style="width:110px" type="number" min="0" step="100" value="${meta||""}" placeholder="—" data-action="fi-fondo-meta" aria-label="Meta del fondo"></label></div>
     <div class="fi-meter"><i style="width:${pc}%;background:var(--ok)"></i></div>
     <p class="hint">${meta>0?`${Math.round(pc)}% de tu meta${ah>=meta?" — ¡cumplida!":""}`:"Ponle una meta para ver tu avance."}${meses!=null?` · cubre ${meses.toFixed(1)} ${fiPl(Math.round(meses*10)/10,"mes","meses")} de tus gastos esenciales`:""}</p>
     ${sug>0&&!meta?`<p class="hint">Meta sugerida: <b class="num">${fiFmt(sug)}</b> (3 meses de tus deudas + gastos). <button class="btn sm" data-action="fi-fondo-sugerida" data-v="${sug}">Usar</button></p>`:""}
-    ${pQ.ahorro>0?`<p class="hint">Tu plan pide <b class="num">${fiFmt(pQ.ahorro)}</b> esta quincena; llevas <b class="num">${fiFmt(aportQ)}</b>${aportQ>=pQ.ahorro?" — cumplido.":" — te faltan "+fiFmt(pQ.ahorro-aportQ)+"."}</p>`:""}
+    ${FQ.meta>0?`<p class="hint">Tu plan pide <b class="num">${fiFmt(FQ.meta)}</b> esta quincena; llevas <b class="num">${fiFmt(aportQ)}</b>${aportQ>=FQ.meta?" — cumplido.":" — te faltan "+fiFmt(FQ.meta-aportQ)+"."}</p>`:""}
     <div class="form-grid g3" style="margin-top:12px"><div><label class="mini">Monto que aportas</label><input class="inp" id="ff-monto" type="number" inputmode="decimal" min="0" step="50" placeholder="$0"></div>
       <div><label class="mini">Sale de</label><select class="inp" id="ff-cuenta">${c.accounts.map(a=>`<option value="${esc(a.id)}" ${a.id==="debito"?"selected":""}>${esc(a.name)}</option>`).join("")}</select></div><div><label class="mini">&nbsp;</label><button class="btn primary" style="width:100%" data-action="fi-fondo-add">+ Aportar</button></div></div></div></section>`;
 }
@@ -1079,6 +1126,18 @@ function fiClick(a,t){
     const m=Math.max(0,Number(fiV("ff-monto"))||0); if(!(m>0)){ toast("Pon cuánto vas a aportar"); return true; }
     fiNewTx({type:"expense",amount:m,categoryId:"ahorro",accountId:fiV("ff-cuenta")||"debito",date:todayStr(),note:"Aportación al fondo de emergencia",recurring:false}); render(); toast("Aportación registrada"); return true; }
   if(a==="fi-saldo-inicial"){ const ac=fiCfg().accounts.filter(x=>x.id!=="credito"); let any=false; ac.forEach(x=>{ const v=fiV("fsi-"+x.id); if(v!==""&&Number.isFinite(Number(v))){ x.saldoInicial=fiR2(Math.max(-1e9,Number(v))); x.saldoDesde=todayStr(); any=true; } else { x.saldoInicial=x.saldoInicial||0; x.saldoDesde=todayStr(); } }); if(!any){ toast("Escribe cuánto tienes en al menos una cuenta"); return true; } touch(); render(); toast("Saldo guardado"); return true; }
+  if(a==="fi-ap-add"){
+    const nombre=fiV("fap-n").trim(), meta=Math.max(0,Number(fiV("fap-m"))||0), fecha=fiV("fap-f");
+    if(!nombre||!(meta>0)){ toast("Escribe para qué es y cuánto necesitas"); return true; }
+    c.apartados.push({id:newId("ap"),nombre,meta,fecha:/^\d{4}-\d{2}-\d{2}$/.test(fecha)?fecha:""}); touch(); render(); toast(fecha?"Apartado creado":"Apartado creado: ponle fecha para calcular cuánto apartar"); return true; }
+  if(a==="fi-ap-del"){ const i=c.apartados.findIndex(x=>x.id===t.dataset.id); if(i<0) return true; const [x]=c.apartados.splice(i,1); touch(); render(); toastUndo("Apartado quitado",()=>{ c.apartados.splice(Math.min(i,c.apartados.length),0,x); touch(); render(); }); return true; }
+  if(a==="fi-ap-aportar"){
+    const ap=c.apartados.find(x=>x.id===t.dataset.id); if(!ap) return true; const v=fiV("fap-"+ap.id), m=v!==""?Number(v):Number(t.dataset.sug);
+    if(!(m>0)){ toast("Escribe cuánto vas a apartar"); return true; }
+    fiNewTx({type:"expense",amount:fiR2(m),categoryId:"ahorro",goalId:ap.id,accountId:"debito",date:todayStr(),note:"Apartado: "+ap.nombre,recurring:false}); render(); toast("Apartado: "+fiFmt(m)+" para "+ap.nombre); return true; }
+  if(a==="fi-ap-todos"){
+    const L=fiApartados().filter(x=>!x.listo&&x.faltaQ>=1); if(!L.length) return true;
+    L.forEach(x=>fiNewTx({type:"expense",amount:fiR2(Math.round(x.faltaQ)),categoryId:"ahorro",goalId:x.id,accountId:"debito",date:todayStr(),note:"Apartado: "+x.nombre,recurring:false})); render(); toast("Apartado en "+L.length+" "+fiPl(L.length,"meta","metas")); return true; }
   if(a==="fi-gf-add"){
     const nombre=fiV("fg-n").trim(), monto=Math.max(0,Number(fiV("fg-m"))||0);
     if(!nombre||!(monto>0)){ toast("Escribe en qué y cuánto, más o menos"); return true; }
@@ -1114,6 +1173,9 @@ function fiChange(a,t){
     else if(f==="limite") e.limite=Math.max(0,Number(t.value)||0);
     else e[f]=t.value===""?null:fiClamp(Number(t.value)||1,1,31);
     touch(); render(); toast("Actualizado"); return true; }
+  if(a==="fi-ap-edit"){
+    const ap=c.apartados.find(x=>x.id===t.dataset.id); if(!ap) return true; FI.open.add("ap-"+ap.id);
+    if(t.dataset.field==="meta") ap.meta=Math.max(0,Number(t.value)||0); else ap.fecha=/^\d{4}-\d{2}-\d{2}$/.test(t.value)?t.value:""; touch(); render(); toast("Apartado actualizado"); return true; }
   if(a==="fi-gf-edit"){
     const g=c.gastosFijos.find(x=>x.id===t.dataset.id); if(!g) return true; const f=t.dataset.field;
     if(f==="monto") g.monto=Math.max(0,Number(t.value)||0); else if(f==="freq") g.freq=t.value==="mes"?"mes":"q"; else g.nombre=t.value.trim();

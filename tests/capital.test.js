@@ -36,12 +36,17 @@ ok(r.veredicto==='CONDICIONES','400 está entre 1× y 2× el colchón → CON CO
 /* necesidad que no puede esperar y deja menos que el colchón → con condiciones, no "esperar" */
 r=CAP.compra({...base,precio:2000,tipo:'necesidad',puedeEsperar:false}); ok(r.veredicto==='CONDICIONES','necesidad que no puede esperar → CON CONDICIONES');
 
-/* sin ingreso confirmado: provisional y sin contar el dinero que solo se espera */
+/* ingreso solo esperado: no se suma, pero define hasta cuándo hay que aguantar; la respuesta queda provisional */
 const sinIng={...base,ingresos:[{concepto:'Quincena',monto:4000,fecha:'2026-11-05',estado:'esperado'}]};
-r=CAP.compra({...sinIng,precio:500}); ok(r.provisional===true,'sin ingreso confirmado la respuesta es provisional');
-ok(r.diasHastaIngreso===null,'no cuenta un ingreso solo esperado');
+r=CAP.compra({...sinIng,precio:500}); ok(r.provisional===true,'con ingreso solo esperado la respuesta es provisional');
+ok(r.diasHastaIngreso===14,'el horizonte llega hasta el ingreso estimado (22-oct → 5-nov = 14 días)');
 ok(r.veredicto!=='VIABLE','provisional nunca es VIABLE a secas ('+r.veredicto+')');
-// 30 días: esencial 3000; pagos 1500 el 30-oct caen dentro → antes = 5000−1500−3000 = 500 → después = 0
+// 14 días: esencial 1400; pago de 1500 el 30-oct cae dentro → antes = 5000−1500−1400 = 2100
+eq(r.disponibleAntes,2100,'con ingreso estimado el 5-nov: 5000 − 1500 − 14 días×100 = 2100');
+/* sin ningún ingreso ni confirmado ni esperado: 30 días sin contar ingresos */
+const nada={...base,ingresos:[]};
+r=CAP.compra({...nada,precio:500}); ok(r.provisional===true&&r.diasHastaIngreso===null,'sin ningún ingreso la respuesta es provisional');
+// 30 días: esencial 3000; pagos 1500 el 30-oct caen dentro → antes = 5000−1500−3000 = 500
 eq(r.disponibleAntes,500,'sin ingreso: 5000 − 1500 − 30 días×100 = 500');
 
 /* un ingreso confirmado retrasado no se cuenta antes de su fecha */
