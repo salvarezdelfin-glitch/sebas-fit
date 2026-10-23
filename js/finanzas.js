@@ -6,7 +6,7 @@
    Todo vive en la misma bóveda cifrada: nada de importar ni sincronizar a mano.
    Orientación general con tus propios números — no es asesoría financiera profesional.
    ============================================================ */
-const FI={tab:"hoy",month:null,planPeriod:"quincenal",cobroPer:"semanal",filter:"",ftype:"all",cp:{precio:"",fecha:"",tipo:"gusto",pago:"contado",meses:"3",tasa:"0",esperar:true},whatif:2,inv:{aporte:"",anios:"5"},flN:1,flMonto:"",open:new Set(),memo:null};
+const FI={tab:"hoy",month:null,planPeriod:"quincenal",cobroPer:"semanal",filter:"",ftype:"all",cp:{precio:"",fecha:"",tipo:"gusto",pago:"contado",meses:"3",tasa:"0",esperar:true},whatif:2,inv:{aporte:"",anios:"5"},sc:{inv:"",im:"",ia:"5",ii:"",pc:"",pz:"",meta:"",lim:"",act:""},flN:1,flMonto:"",open:new Set(),memo:null};
 const FI_POT="https://salvarezdelfin-glitch.github.io/potenciador-de-conceptos/";
 const FI_CATS=[
   {id:"clases-part",name:"Clases particulares",type:"income"},{id:"otros-ing",name:"Otros ingresos",type:"income"},
@@ -632,6 +632,46 @@ function fiInvertirCard(){
     <p class="hint">Esto es información educativa para decidir mejor, no una recomendación de qué comprar ni asesoría financiera profesional. Si vas a invertir, platica con un asesor autorizado.</p></div></section>`;
 }
 
+/* ---------- ESCENARIOS Y REGLAS PROPIAS (la app hace la cuenta; las decisiones y los números son tuyos) ---------- */
+function fiEscHtml(){
+  const S=FI.sc, f=fiFmt, n=v=>Number(v)||0;
+  const esencialDia=Math.max(fiConsumoProm()/30,fiGastosAprox("mensual")/30)+fiDeudaMensual()/30, ahQ=fiPlan("quincenal").ahorro, inv=n(S.inv);
+  const caida=inv>0?[10,30,50].map(p=>{ const perd=inv*p/100;
+      return `<div class="fi-tr"><span>Si baja ${p}%</span><span class="num">pierdes ${f(perd)} · te quedan ${f(inv-perd)}</span></div><div class="hint" style="margin:-4px 0 4px">${esencialDia>0?"≈ "+Math.round(perd/esencialDia)+" días de tus gastos y deudas":""}${esencialDia>0&&ahQ>0?" · ":""}${ahQ>0?"≈ "+(perd/ahQ).toFixed(1)+" quincenas de tu ahorro":""}</div>`; }).join("")+`<p class="hint">Pregúntate: si esto pasa justo cuando necesitas el dinero, ¿tu fondo de emergencia cubre sin vender? Si no, ese dinero no debería estar invertido.</p>`
+    :`<p class="hint">Escribe cuánto piensas invertir y verás cuánto perderías si baja.</p>`;
+  const m=n(S.im), y=Math.max(1,n(S.ia)||5), pct=S.ii===""?null:n(S.ii);
+  const infl=m>0&&pct!=null?`<div class="fi-tr"><span>Dentro de ${y} ${fiPl(y,"año","años")}, ${f(m)} comprarían como hoy</span><span class="num">${f(m/Math.pow(1+pct/100,y))}</span></div><div class="fi-tr"><span>Para comprar lo mismo que hoy necesitarías</span><span class="num">${f(m*Math.pow(1+pct/100,y))}</span></div><p class="hint">Con ${pct}% de inflación anual (supuesta). Si tu dinero rinde menos que la inflación, pierde poder de compra aunque el número crezca.</p>`
+    :`<p class="hint">Pon un monto y una inflación anual supuesta (consulta la vigente en Banxico o INEGI) y verás cuánto compra tu dinero en el futuro.</p>`;
+  const pc=n(S.pc), pz=n(S.pz), meta=n(S.meta), lim=n(S.lim), act=n(S.act); let reglas;
+  if(pc>0&&pz>0){
+    const costo=pc*pz, objetivo=meta>0?pc*(1+meta/100):null, piso=lim>0?pc*(1-lim/100):null; let est="";
+    if(act>0){ const gp=act*pz-costo, pp=gp/costo*100, hit=objetivo&&act>=objetivo, low=piso&&act<=piso;
+      est=`<div class="fi-tr"><span>Hoy (a ${f(act)} por pieza)</span><span class="num" style="color:${gp<0?"var(--danger)":"var(--ok)"}">${gp>=0?"+":""}${f(gp)} (${pp>=0?"+":""}${pp.toFixed(1)}%)</span></div>
+        <div class="fi-verdict ${hit?"ok":low?"no":"sin-plan"}"><b>${hit?"Tu regla de meta ya se cumplió":low?"Tu límite de pérdida ya se alcanzó":"Sigue dentro de tus reglas"}</b><ul><li>${hit?"Tú decidiste actuar a partir de "+f(objetivo)+" por pieza.":low?"Tú decidiste actuar a partir de "+f(piso)+" por pieza.":"Todavía no toca ninguna de las dos reglas que tú pusiste."} La decisión es tuya.</li></ul></div>`; }
+    reglas=`<div class="fi-tr"><span>Invertido (${pz} piezas)</span><span class="num">${f(costo)}</span></div>${objetivo?`<div class="fi-tr"><span>Tu meta (+${meta}%)</span><span class="num">${f(objetivo)} por pieza</span></div>`:""}${piso?`<div class="fi-tr"><span>Tu límite de pérdida (−${lim}%)</span><span class="num">${f(piso)} por pieza</span></div>`:""}${est}
+      <p class="hint">No incluye comisiones ni impuestos sobre ganancias; consúltalos con tu institución.</p>`;
+  } else reglas=`<p class="hint">Pon a cuánto compraste y cuántas piezas; después tu meta y tu límite (tú los eliges). Con el precio de hoy te digo si ya se cumplió alguna de <b>tus</b> reglas.</p>`;
+  return {caida,infl,reglas};
+}
+function fiEscCard(){
+  const S=FI.sc, e=fiEscHtml(), inp=(id,lbl,v,ph,step)=>`<div><label class="mini">${lbl}</label><input class="inp" id="fsc-${id}" type="number" inputmode="decimal" min="0" step="${step||1}" placeholder="${ph||""}" value="${esc(v)}" data-action="fi-esc"></div>`;
+  return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Probar escenarios y mis reglas</h3><span class="hint">la app hace la cuenta; tú decides</span></div>
+    <p class="hint" style="margin-top:0">No te digo qué comprar ni cuándo vender: no soy asesor con licencia. Aquí pones <b>tus</b> números y reglas y yo solo calculo.</p>
+    <p class="fi-cap-t">1. ¿Y si baja lo que invierto?</p><div class="form-grid g3">${inp("inv","Dinero que invertirías $",S.inv,"$0",100)}</div><div id="fsc-r1" style="margin-top:8px">${e.caida}</div>
+    <p class="fi-cap-t" style="margin-top:16px">2. ¿Cuánto compra mi dinero con la inflación?</p><div class="form-grid g3">${inp("im","Monto $",S.im,"$0",100)}${inp("ia","Años",S.ia,"5")}${inp("ii","Inflación anual % (supuesta)",S.ii,"ej. 4",0.1)}</div><div id="fsc-r2" style="margin-top:8px">${e.infl}</div>
+    <p class="fi-cap-t" style="margin-top:16px">3. Mis reglas de salida (las pongo yo)</p><div class="form-grid g3">${inp("pc","Compré a $ por pieza",S.pc,"$0",0.01)}${inp("pz","Piezas",S.pz,"0")}${inp("act","Precio de hoy $",S.act,"$0",0.01)}${inp("meta","Mi meta de ganancia %",S.meta,"",1)}${inp("lim","Mi límite de pérdida %",S.lim,"",1)}</div><div id="fsc-r3" style="margin-top:8px">${e.reglas}</div>
+    <p class="fi-cap-t" style="margin-top:16px">4. Preguntas para un asesor autorizado</p>
+    <ul class="hint" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px">
+      <li>¿Está registrado ante la CNBV? Búscalo en cnbv.gob.mx (registro de asesores en inversiones) y en el Buró de Entidades Financieras de CONDUSEF antes de dar dinero.</li>
+      <li>¿Cuánto me cobra en total: comisión de compra, de venta, de custodia y por administración?</li>
+      <li>¿Qué pasa si necesito el dinero antes de tiempo? ¿En cuántos días lo recibo y con qué pérdida posible?</li>
+      <li>¿Cuál es lo máximo que podría perder y en cuánto tiempo suele recuperarse una caída así?</li>
+      <li>¿Cómo se tratan los impuestos sobre mis ganancias y quién me da el comprobante?</li>
+      <li>¿Con quién queda mi dinero (custodia) y está protegido si la institución quiebra?</li>
+      <li>¿Qué parte de mi dinero es razonable arriesgar dado mi fondo, mis deudas y mi plazo? (Esta pregunta es para él: yo no puedo contestarla.)</li></ul>
+    <p class="hint">Información educativa y cálculos con tus datos; no es asesoría financiera profesional ni una recomendación de compra o venta.</p></div></section>`;
+}
+
 /* ============================================================
    CAPITAL · ¿me lo puedo comprar?, estrategia de deudas, proyección y patrimonio (usan el motor CAP de arriba)
    ============================================================ */
@@ -856,7 +896,7 @@ function fiLedger(){
 }
 
 /* ---------- CRECER ---------- */
-function fiViewCrecer(){ return fiPatrimonioCard()+fiFondo_()+fiInvertirCard()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
+function fiViewCrecer(){ return fiPatrimonioCard()+fiFondo_()+fiInvertirCard()+fiEscCard()+fiIngresosBlk()+fiFreelanceBlk()+fiDatosBlk(); }
 function fiFlWhatHtml(){
   const s=fiFlStats(), n=Number(FI.flN)||0, m=Number(FI.flMonto)||s.prom||0, pM=fiPlan("mensual");
   if(!(m>0)) return `<p class="hint">Pon el monto de un proyecto (por ejemplo lo que sueles cotizar) para ver cuánto sumaría.</p>`;
@@ -1054,6 +1094,7 @@ function fiClick(a,t){
 /* escribir sin redibujar (no perder el foco) */
 function fiInput(a,t){
   if(a==="fi-search"){ FI.filter=t.value; const l=document.getElementById("fl-list"), n=document.getElementById("fl-count"); if(l) l.innerHTML=fiLedgerHtml(); if(n) n.textContent=fiLedgerRows().length+" movimientos"; return true; }
+  if(a==="fi-esc"){ const g=id=>fiV("fsc-"+id); FI.sc={inv:g("inv"),im:g("im"),ia:g("ia"),ii:g("ii"),pc:g("pc"),pz:g("pz"),meta:g("meta"),lim:g("lim"),act:g("act")}; const e=fiEscHtml(); [["fsc-r1",e.caida],["fsc-r2",e.infl],["fsc-r3",e.reglas]].forEach(([id,h])=>{ const r=document.getElementById(id); if(r) r.innerHTML=h; }); return true; }
   if(a==="fi-inv"){ FI.inv={aporte:fiV("fv-aporte"),anios:fiV("fv-anios")}; const r=document.getElementById("fv-result"); if(r) r.innerHTML=fiInvHtml(); return true; }
   if(a==="fi-cp"){ const antes=FI.cp.pago; FI.cp={precio:fiV("fcp-precio"),fecha:fiV("fcp-fecha"),tipo:fiV("fcp-tipo")||"gusto",pago:fiV("fcp-pago")||"contado",meses:fiV("fcp-meses")||FI.cp.meses,tasa:fiV("fcp-tasa")||(document.getElementById("fcp-tasa")?"0":FI.cp.tasa),esperar:fiV("fcp-esperar")!=="0"}; if(antes!==FI.cp.pago){ render(); return true; } const r=document.getElementById("fcp-result"); if(r) r.innerHTML=fiCompraHtml(); return true; }
   if(a==="fi-whatif"){ FI.whatif=t.value; const r=document.getElementById("fw-result"); if(r) r.innerHTML=fiWhatIfHtml(); return true; }
