@@ -161,3 +161,6 @@ details.fi-more[open] > summary::before{content:"▾ "}
 /* apartados */
 .fi-ap-act{display:flex;gap:8px;align-items:center;margin-top:4px}
 .fi-ap-act .inp{width:120px;padding:7px 9px;font-size:13px}
+
+.fi-ajustes{margin-top:14px;padding-top:4px;border-top:1px dashed var(--hairline)}
+.fi-ajustes .fi-paso{padding:10px 0}

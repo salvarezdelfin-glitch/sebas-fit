@@ -736,6 +736,37 @@ function fiCapInput(){
     fondoEmergencia:Number(c.fondoMeta)>0?{actual:fiFondo(),meta:Number(c.fondoMeta)}:null,
     precio:Number(cp.precio)||0,fecha:cp.fecha||hoy,tipo:cp.tipo,pago:cp.pago,credito:cp.pago==="credito"?{meses:Number(cp.meses)||1,tasaAnual:Number(cp.tasa)||0}:null,puedeEsperar:!!cp.esperar};
 }
+/* ---------- CÓMO AJUSTAR UNA COMPRA a tus finanzas (en vez de solo decir "no") ---------- */
+function fiAjustes(I,r){
+  if(r.veredicto==="VIABLE"||!(I.precio>0)) return [];
+  const P=I.precio, pQ=fiPlan("quincenal"), pM=fiPlan("mensual"), hoy=todayStr(), opts=[], f=fiFmt;
+  const usual=Math.max(fiGastosAprox("quincenal"),fiConsumoProm()/2), hol=usual>0?Math.max(0,pQ.gasto-usual):0;   // lo que te sobra cada quincena después de ahorro, deudas y tus gastos de siempre
+  // 1) esperar a tu ingreso
+  if(r.fechaViable&&r.fechaViable>hoy) opts.push({t:"Esperar a tu ingreso del "+fmtCorto(r.fechaViable),s:"Ese día ya te alcanzaría con colchón, sin tocar tus pagos ni tu ahorro."});
+  // 2) apartarlo poco a poco (compras de contado, sin deuda)
+  if(usual<=0) opts.push({t:"Anota tus gastos de siempre",s:"Sin eso no sé cuánto te sobra cada quincena para proponerte un plan de ahorro."});
+  else if(hol>=50){
+    const k=Math.ceil(P/hol); let d=fiHeroModel().q.endStr; for(let i=1;i<k&&i<60;i++) d=quincenaFor(addDays(d,1),0).endStr;
+    if(k<=12) opts.push({t:`Apartarlo en ${k} ${fiPl(k,"quincena","quincenas")}: ${f(Math.ceil(P/k))} cada una`,s:`Te sobran unos ${f(hol)} por quincena después de tu ahorro, tus deudas y tus gastos de siempre; lo compras de contado el ${fmtCorto(d)} sin deuda y sin mover lo demás.`,
+      btn:`<button class="btn sm" data-action="fi-ap-compra" data-meta="${Math.round(P)}" data-fecha="${d}">Crear apartado</button>`});
+    else opts.push({t:"Apartarlo te tomaría más de 6 meses",s:`Te sobran unos ${f(hol)} por quincena. Considera una opción más barata o una meta con más tiempo.`});
+  } else opts.push({t:"No te sobra margen para apartarlo",s:"Con tu plan actual todo ya tiene destino cada quincena. Para comprarlo habría que subir ingreso o bajar otro gasto."});
+  // 3) a meses sin intereses, solo si la mensualidad cabe cómoda
+  if(!I.credito&&hol>0){
+    const holM=hol*2, deudaM=fiDeudaMensual(); let ok=null;
+    for(const n of [3,6,9,12]){ const cuota=P/n, carga=pM.base>0?(deudaM+cuota)/pM.base:1; if(cuota<=holM*.5&&carga<=.35){ ok={n,cuota,carga}; break; } }
+    if(ok) opts.push({t:`A ${ok.n} meses sin intereses: ${f(ok.cuota)} al mes`,s:`Solo si de verdad es sin intereses. Te seguirían sobrando ${f(holM-ok.cuota)} al mes y tus deudas serían el ${fiPct(ok.carga)} de tu ingreso.`});
+    else opts.push({t:"A meses no es buena idea ahora",s:"Aun a 12 meses la mensualidad se comería demasiado de lo que te sobra; sería meterte en deuda."});
+  }
+  // 4) comprar algo más barato que sí cabe hoy
+  const cabe=Math.floor(Math.max(0,r.disponibleAntes-r.colchon)/50)*50;
+  if(cabe>=50&&cabe<P) opts.push({t:`Una opción de hasta ${f(cabe)}`,s:"Es lo máximo que sí cabe hoy sin quedarte por debajo de tu colchón antes de cobrar."});
+  return opts;
+}
+function fiAjustesHtml(I,r){
+  const o=fiAjustes(I,r); if(!o.length) return "";
+  return `<div class="fi-ajustes"><p class="fi-cap-t">Cómo hacerlo sin que te afecte</p>${o.map((x,i)=>`<div class="fi-paso"><span class="fi-paso-n">${i+1}</span><div class="fi-paso-body"><b>${x.t}</b><div class="hint" style="margin:2px 0 0">${x.s}</div></div>${x.btn||""}</div>`).join("")}</div>`;
+}
 function fiCompraHtml(){
   const I=fiCapInput();
   if(!fiSaldoOk()) return `<p class="hint">Para decirte si cabe necesito saber cuánto tienes hoy: escríbelo arriba, en "Primero: cuánto tienes hoy".</p>`;
@@ -754,6 +785,7 @@ function fiCompraHtml(){
     ${r.riesgos.length?`<p class="fi-cap-t">Riesgos</p><ul>${r.riesgos.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
     <p class="fi-cap-t">Qué haría</p><p style="margin:0">${esc(r.alternativa)}</p>
     ${r.fechaViable&&r.veredicto!=="VIABLE"?`<p class="hint" style="margin:6px 0 0">Fecha en que sí cabría con colchón: <b>${fmtCorto(r.fechaViable)}</b></p>`:""}</div>
+    ${fiAjustesHtml(I,r)}
     <p class="hint">Es una cuenta con tus datos registrados, no asesoría financiera profesional. Calculado el ${fmtCorto(I.hoy)}; lo estimado se marca como provisional.</p>`;
 }
 function fiCompraCard(){
@@ -1126,6 +1158,7 @@ function fiClick(a,t){
     const m=Math.max(0,Number(fiV("ff-monto"))||0); if(!(m>0)){ toast("Pon cuánto vas a aportar"); return true; }
     fiNewTx({type:"expense",amount:m,categoryId:"ahorro",accountId:fiV("ff-cuenta")||"debito",date:todayStr(),note:"Aportación al fondo de emergencia",recurring:false}); render(); toast("Aportación registrada"); return true; }
   if(a==="fi-saldo-inicial"){ const ac=fiCfg().accounts.filter(x=>x.id!=="credito"); let any=false; ac.forEach(x=>{ const v=fiV("fsi-"+x.id); if(v!==""&&Number.isFinite(Number(v))){ x.saldoInicial=fiR2(Math.max(-1e9,Number(v))); x.saldoDesde=todayStr(); any=true; } else { x.saldoInicial=x.saldoInicial||0; x.saldoDesde=todayStr(); } }); if(!any){ toast("Escribe cuánto tienes en al menos una cuenta"); return true; } touch(); render(); toast("Saldo guardado"); return true; }
+  if(a==="fi-ap-compra"){ c.apartados.push({id:newId("ap"),nombre:"Compra planeada",meta:Number(t.dataset.meta)||0,fecha:t.dataset.fecha||""}); touch(); toast("Apartado creado: lo ves en Crecer, en Mis apartados"); render(); return true; }
   if(a==="fi-ap-add"){
     const nombre=fiV("fap-n").trim(), meta=Math.max(0,Number(fiV("fap-m"))||0), fecha=fiV("fap-f");
     if(!nombre||!(meta>0)){ toast("Escribe para qué es y cuánto necesitas"); return true; }
