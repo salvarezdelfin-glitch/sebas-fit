@@ -164,3 +164,19 @@ details.fi-more[open] > summary::before{content:"▾ "}
 
 .fi-ajustes{margin-top:14px;padding-top:4px;border-top:1px dashed var(--hairline)}
 .fi-ajustes .fi-paso{padding:10px 0}
+
+.fi-extra-blk{margin-top:14px;padding-top:12px;border-top:1px dashed var(--hairline)}
+
+/* iPhone y iPad: tacto cómodo (44 px, como pide Apple), fechas de iOS que no se desbordan, y espacio para la barra inferior y la raya de inicio */
+.fi input[type=date],.fi input[type=number],.fi select{min-width:0;max-width:100%}
+.fi input[type=date]{-webkit-appearance:none;appearance:none;min-height:42px}
+.fi{padding-bottom:calc(40px + env(safe-area-inset-bottom))}
+@media (pointer:coarse){
+  .fi .btn,.fi .btn.sm{min-height:44px;padding-top:10px;padding-bottom:10px}
+  .fi .inp,.fi select.inp{min-height:44px}
+  .fi .seg button,.fi .tabs button{min-height:44px}
+  .fi-gf-row .btn{min-height:44px}
+  .fi-lrow{padding-top:14px;padding-bottom:14px}
+}
+@media (max-width:560px){ .fi-ap-act{flex-wrap:wrap} .fi-ap-act .inp{flex:1;min-width:120px} .fi-paso{flex-wrap:wrap} .fi-paso .btn{margin-left:42px} }
+@media (min-width:561px) and (max-width:1100px){ .fi-pers{grid-template-columns:repeat(2,1fr)} }

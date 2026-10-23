@@ -231,6 +231,9 @@ function fiEvents(basis){
   fiTx().forEach(t=>{ if(t.type==="income"&&t.date) ev.push({date:t.date,amount:t.amount,src:"manual",estudio:t.note||(fiCat(t.categoryId)||{name:"Otros"}).name,clases:0}); });
   return FI.memo[basis]=ev;
 }
+const FI_BASE_SRC=new Set(["clases","cobro","pt"]);   // trabajo de siempre: clases y clientes PT. Lo demás (proyectos, dinero que agregas) es extra y se suma encima
+const fiBaseIn=(a,b)=>fiSum(fiEvents().filter(e=>FI_BASE_SRC.has(e.src)&&e.date>=a&&e.date<=b),e=>e.amount);
+const fiExtraIn=(a,b)=>fiSum(fiEvents().filter(e=>!FI_BASE_SRC.has(e.src)&&e.date>=a&&e.date<=b),e=>e.amount);
 const fiIncomeIn=(a,b)=>fiSum(fiEvents().filter(e=>e.date>=a&&e.date<=b),e=>e.amount);
 
 /* proyectos freelance: Potenciador de Conceptos deja un resumen (cotizaciones y cobros) en localStorage —mismo sitio—
@@ -309,15 +312,20 @@ function fiAvgRate(){
 
 /* modelo de ingreso: promedio de las últimas quincenas COMPLETAS (la primera parcial y la última si hay datos viejos se descartan) */
 function fiModel(){
-  const ev=fiEvents().slice().sort((a,b)=>a.date.localeCompare(b.date));
-  if(!ev.length) return {hasData:false,qs:[],avg:0,min:0,fallback:0,first:null,last:null,stale:true,daysSince:null};
+  const ev=fiEvents().filter(e=>FI_BASE_SRC.has(e.src)).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!ev.length) return {hasData:false,qs:[],avg:0,min:0,minM:0,mesesN:0,peorMes:null,fallback:0,first:null,last:null,stale:true,daysSince:null};
   const today=todayStr(), first=ev[0].date, last=ev[ev.length-1].date, daysSince=fiDays(last,today), stale=daysSince>10;
   const fq=quincenaFor(first,0), firstOk=first<=addDays(fq.startStr,2);
   let q=quincenaFor(last,0); if(q.endStr>=today||stale) q=quincenaFor(q.startStr,1);
   const qs=[];
-  while(qs.length<4&&(q.startStr>fq.startStr||(q.startStr===fq.startStr&&firstOk))){ qs.push({q,total:fiIncomeIn(q.startStr,q.endStr)}); q=quincenaFor(q.startStr,1); }
+  while(qs.length<4&&(q.startStr>fq.startStr||(q.startStr===fq.startStr&&firstOk))){ qs.push({q,total:fiBaseIn(q.startStr,q.endStr)}); q=quincenaFor(q.startStr,1); }
   const vals=qs.map(x=>x.total), span=Math.max(1,fiDays(first,last)+1);
-  return {hasData:true,qs,avg:vals.length?fiSum(vals,v=>v)/vals.length:0,min:vals.length?Math.min(...vals):0,fallback:fiSum(ev,e=>e.amount)/span*15,first,last,stale,daysSince};
+  // peor mes: de los meses completos (no el actual ni el primero si empezaste a registrar a mitad), con meses en cero incluidos hasta tu último ingreso
+  const byM={}; ev.forEach(e=>{ const k=e.date.slice(0,7); byM[k]=(byM[k]||0)+e.amount; });
+  const cur=today.slice(0,7), lastM=last.slice(0,7), firstM=first.slice(0,7), startM=Number(first.slice(8))<=5?firstM:fiShiftMonth(firstM,1), endM=lastM<cur?lastM:fiShiftMonth(cur,-1), keys=[];
+  for(let k=startM;k<=endM&&keys.length<24;k=fiShiftMonth(k,1)) keys.push(k);
+  const mk=keys.slice(-6), mv=mk.map(k=>byM[k]||0), minM=mv.length?Math.min(...mv):0, peorMes=mv.length?mk[mv.indexOf(minM)]:null;
+  return {hasData:true,qs,minM,mesesN:mk.length,peorMes,avg:vals.length?fiSum(vals,v=>v)/vals.length:0,min:vals.length?Math.min(...vals):0,fallback:fiSum(ev,e=>e.amount)/span*15,first,last,stale,daysSince};
 }
 /* gastos de siempre (aproximados): cada uno en pesos por quincena o por mes */
 function fiGastosAprox(period){
@@ -325,13 +333,17 @@ function fiGastosAprox(period){
 }
 function fiPlan(period){
   const c=fiCfg(), m=fiModel(), p=c.metaAhorroPct!=null?Number(c.metaAhorroPct):20;
-  const autoQ=(c.modoBase==="minimo"?m.min:m.avg)||m.fallback||0;
+  const minMode=c.modoBase!=="promedio", useMin=minMode&&m.minM>0;
+  const autoQ=useMin?m.minM/2:((minMode?m.min:m.avg)||m.fallback||0);   // por defecto el plan se arma con lo MENOS que has ganado en un mes con clases
   const manualQ=c.ingresoQuincenalManual!=null, manualM=c.ingresoMensualManual!=null;
-  const baseQ=manualQ?Number(c.ingresoQuincenalManual):autoQ, baseM=manualM?Number(c.ingresoMensualManual):baseQ*2;
+  const baseQ=manualQ?Number(c.ingresoQuincenalManual):autoQ, baseM=manualM?Number(c.ingresoMensualManual):(useMin&&!manualQ?m.minM:baseQ*2);
   const base=period==="quincenal"?baseQ:baseM, deudas=period==="quincenal"?fiDeudaMensual()/2:fiDeudaMensual();
   const resto=Math.max(0,base-deudas), ahorroMeta=resto*p/100, G=fiGastosAprox(period);
-  const ahorro=G>0?Math.min(ahorroMeta,Math.max(0,resto-G)):ahorroMeta, gasto=resto-ahorro;   // lo que gastas de siempre va primero; el ahorro nunca pasa de lo que sobra
-  return {period,base,manual:period==="quincenal"?manualQ:manualM,deudas,resto,ahorro,ahorroMeta,G,faltaAhorro:ahorroMeta-ahorro,gasto,pct:p,autoQ,model:m,over:base>0&&deudas>base};
+  const ahorro0=G>0?Math.min(ahorroMeta,Math.max(0,resto-G)):ahorroMeta;
+  const per=period==="quincenal"?quincenaFor(todayStr(),0):{startStr:todayStr().slice(0,7)+"-01",endStr:todayStr().slice(0,7)+"-31"};
+  const extra=fiExtraIn(per.startStr,per.endStr), ahorroX=extra*p/100;   // el dinero extra que cae en este periodo se reparte igual que lo demás: tu % al ahorro y el resto para gastar
+  const ahorro=ahorro0+ahorroX, gasto=resto-ahorro0+(extra-ahorroX);   // lo que gastas de siempre va primero; el ahorro nunca pasa de lo que sobra
+  return {period,base,manual:period==="quincenal"?manualQ:manualM,deudas,resto,ahorro,ahorroMeta,G,faltaAhorro:ahorroMeta-ahorro0,extra,gasto,pct:p,autoQ,model:m,over:base>0&&deudas>base};
 }
 function fiHeroModel(){
   const today=todayStr(), q=quincenaFor(today,0), p=fiPlan("quincenal");
@@ -459,7 +471,7 @@ function fiHero(){
   else { amt=fiFmt(Math.floor(h.porDia)); sub=`Te quedan ${fiFmt(h.restante)} para ${h.diasRest} ${fiPl(h.diasRest,"día","días")} (hasta el ${fmtCorto(h.q.endStr)}).`; pc=fiClamp(h.gastado/p.gasto*100,0,100); color=pc>=85?"var(--danger)":pc>=65?"var(--warn)":"var(--ok)"; }
   return `<section class="blk"><div class="fi-hero"><span class="eyebrow">Hoy puedes gastar</span><div class="fi-hero-amt ${cls}">${amt}</div><p class="fi-hero-sub">${sub}</p>
     <div class="fi-meter"><i style="width:${pc}%;background:${color}"></i></div>
-    <div class="fi-hero-foot"><span>Gastado ${fiFmt(h.gastado)} de ${fiFmt(Math.max(0,p.gasto))} · quincena ${fiQLabel(h.q)}</span><span>${p.base>0?`Base ${fiFmt(p.base)} − deudas ${fiFmt(p.deudas)} − ahorro ${fiFmt(p.ahorro)}`:""}</span></div></div></section>`;
+    <div class="fi-hero-foot"><span>Gastado ${fiFmt(h.gastado)} de ${fiFmt(Math.max(0,p.gasto))} · quincena ${fiQLabel(h.q)}</span><span>${p.base>0?`Base ${fiFmt(p.base)}${p.extra>0?` + extra ${fiFmt(p.extra)}`:""} − deudas ${fiFmt(p.deudas)} − ahorro ${fiFmt(p.ahorro)}`:""}</span></div></div></section>`;
 }
 
 /* ---------- APARTADOS: dinero para fechas y metas (Japón, aniversario…) para no endeudarte cuando lleguen ---------- */
@@ -613,23 +625,30 @@ function fiDiagCard(){
     <div class="fi-insights">${ins}</div></div>`;
 }
 
+function fiMinLine(m){ return m.minM>0?` <b>Tu peor mes con clases</b> de los últimos ${m.mesesN} ${fiPl(m.mesesN,"mes","meses")} fue <b>${fiFmt(m.minM)}</b> (${MESES[Number(m.peorMes.slice(5,7))-1]}). El plan se arma con eso, así nunca cuentas con dinero que quizá no llegue; lo que entre de más lo sumas abajo como dinero extra.`:""; }
+function fiExtraBlk(period){
+  const hoy=todayStr(), per=period==="quincenal"?quincenaFor(hoy,0):{startStr:hoy.slice(0,7)+"-01",endStr:hoy.slice(0,7)+"-31"}, ex=fiEvents().filter(e=>!FI_BASE_SRC.has(e.src)&&e.date>=per.startStr&&e.date<=per.endStr), tot=fiSum(ex,e=>e.amount);
+  return `<div class="fi-extra-blk"><div class="fi-card-head" style="margin:0 0 6px"><b>Dinero extra</b><span class="hint">${tot>0?"este "+(period==="quincenal"?"periodo":"mes")+": +"+fiFmt(tot):"nada este "+(period==="quincenal"?"periodo":"mes")}</span></div>
+    <div class="fi-gf-row" style="grid-template-columns:minmax(0,1fr) 120px auto"><input class="inp" id="fex-n" placeholder="¿De dónde? (regalo, proyecto…)"><input class="inp" id="fex-m" type="number" inputmode="decimal" min="0" step="50" placeholder="$0"><button class="btn sm primary" data-action="fi-extra-add">+ Sumar</button></div>
+    <p class="hint" style="margin:6px 0 0">Se suma a lo que tienes: tu % va al ahorro y el resto a lo que puedes gastar. Los proyectos de Potenciador también cuentan aquí.</p></div>`;
+}
 function fiPlanCard(){
   const c=fiCfg(), period=FI.planPeriod, p=fiPlan(period), m=p.model, has=p.base>0, basis=fiBasis();
   const s1=has?Math.min(100,p.deudas/p.base*100):0, s2=has?fiClamp(p.ahorro/p.base*100,0,100-s1):0, s3=has?Math.max(0,100-s1-s2):0;
-  let ctx;
+  const extraBlk=fiExtraBlk(period), minLine=(fiCfg().modoBase!=="promedio")?fiMinLine(m):""; let ctx;
   if(period==="quincenal"){ const q=quincenaFor(todayStr(),0);
     ctx=m.qs.length?`${m.qs.length===1?"Tu última quincena completa":`Tus últimas ${m.qs.length} quincenas completas`}: ${m.qs.map(x=>fiFmt(x.total)).join(" · ")}. Esta quincena (${fiQLabel(q)}) llevas ${fiFmt(fiIncomeIn(q.startStr,todayStr()))}.`:"Todavía no hay una quincena completa con datos; el cálculo usa tu ritmo diario."; }
   else ctx="El ingreso mensual es el doble de tu ingreso quincenal base, salvo que lo escribas a mano.";
   const note=p.over?`<p class="hint" style="color:var(--danger)">Tus deudas de ${period==="quincenal"?"la quincena":"el mes"} (${fiFmt(p.deudas)}) superan tu ingreso. Hace falta más plazo, más ingreso o pagar menos por periodo en alguna.</p>`:(!has?`<p class="hint">Pon tu ingreso para ver el reparto.</p>`:"");
   return `<div class="card"><div class="fi-card-head"><h3>Plan de pago</h3><div class="seg"><button class="${period==="quincenal"?"on":""}" data-action="fi-plan-period" data-period="quincenal">Quincenal</button><button class="${period==="mensual"?"on":""}" data-action="fi-plan-period" data-period="mensual">Mensual</button></div></div>
-    <p class="hint" style="margin-top:0">${ctx}</p>
+    <p class="hint" style="margin-top:0">${ctx}${minLine}</p>
     <div class="form-grid" style="grid-template-columns:1fr 130px;margin:12px 0 14px">
       <div><label class="mini">Ingreso ${period==="quincenal"?"quincenal":"mensual"} ${p.manual?'<span class="chip warn">manual</span>':'<span class="chip">automático</span>'}</label><input class="inp" type="number" inputmode="decimal" min="0" step="50" value="${Math.round(p.base)}" data-action="fi-plan-ingreso"></div>
       <div><label class="mini">Meta de ahorro %</label><input class="inp" type="number" inputmode="decimal" min="0" max="100" step="1" value="${p.pct}" data-action="fi-plan-pct"></div></div>
     ${has?`<div class="fi-planbar"><div style="width:${s1}%;background:var(--cardio)"></div><div style="width:${s2}%;background:var(--ok)"></div><div style="width:${s3}%;background:var(--accent)"></div></div>`:""}
     <div class="fi-legend"><span><i style="background:var(--cardio)"></i>Deudas ${fiFmt(p.deudas)}</span><span><i style="background:var(--ok)"></i>Ahorro ${fiFmt(p.ahorro)}</span><span><i style="background:var(--accent)"></i>Para gastar ${fiFmt(p.gasto)}</span></div>
-    ${note}
-    <div class="acts-row" style="margin-top:12px"><div class="seg"><button class="${c.modoBase==="minimo"?"":"on"}" data-action="fi-plan-modo" data-modo="promedio">Base: promedio</button><button class="${c.modoBase==="minimo"?"on":""}" data-action="fi-plan-modo" data-modo="minimo">Base: mi mínimo</button></div>
+    ${note}${extraBlk}
+    <div class="acts-row" style="margin-top:12px"><div class="seg"><button class="${c.modoBase==="promedio"?"on":""}" data-action="fi-plan-modo" data-modo="promedio">Base: promedio</button><button class="${c.modoBase==="promedio"?"":"on"}" data-action="fi-plan-modo" data-modo="minimo">Base: mi mínimo</button></div>
       <div class="seg"><button class="${basis==="devengado"?"on":""}" data-action="fi-plan-basis" data-basis="devengado">Lo que doy</button><button class="${basis==="cobrado"?"on":""}" data-action="fi-plan-basis" data-basis="cobrado">Lo que cobro</button></div>
       ${p.manual?`<button class="btn sm ghost" data-action="fi-plan-auto">Usar automático</button>`:""}</div>
     <p class="hint">“Lo que doy” cuenta tus clases confirmadas; “Lo que cobro” cuenta solo los cobros que marcaste. Con ingresos variables, “mi mínimo” arma el plan con tu peor quincena reciente: lo que entre de más es extra.</p></div>`;
@@ -1158,6 +1177,9 @@ function fiClick(a,t){
     const m=Math.max(0,Number(fiV("ff-monto"))||0); if(!(m>0)){ toast("Pon cuánto vas a aportar"); return true; }
     fiNewTx({type:"expense",amount:m,categoryId:"ahorro",accountId:fiV("ff-cuenta")||"debito",date:todayStr(),note:"Aportación al fondo de emergencia",recurring:false}); render(); toast("Aportación registrada"); return true; }
   if(a==="fi-saldo-inicial"){ const ac=fiCfg().accounts.filter(x=>x.id!=="credito"); let any=false; ac.forEach(x=>{ const v=fiV("fsi-"+x.id); if(v!==""&&Number.isFinite(Number(v))){ x.saldoInicial=fiR2(Math.max(-1e9,Number(v))); x.saldoDesde=todayStr(); any=true; } else { x.saldoInicial=x.saldoInicial||0; x.saldoDesde=todayStr(); } }); if(!any){ toast("Escribe cuánto tienes en al menos una cuenta"); return true; } touch(); render(); toast("Saldo guardado"); return true; }
+  if(a==="fi-extra-add"){
+    const m=Number(fiV("fex-m")); if(!(m>0)){ toast("Escribe cuánto te cayó"); return true; }
+    fiNewTx({type:"income",amount:fiR2(m),categoryId:"otros-ing",accountId:"debito",date:todayStr(),note:fiV("fex-n").trim()||"Dinero extra",recurring:false}); render(); toast("Sumado: "+fiFmt(m)+" de dinero extra"); return true; }
   if(a==="fi-ap-compra"){ c.apartados.push({id:newId("ap"),nombre:"Compra planeada",meta:Number(t.dataset.meta)||0,fecha:t.dataset.fecha||""}); touch(); toast("Apartado creado: lo ves en Crecer, en Mis apartados"); render(); return true; }
   if(a==="fi-ap-add"){
     const nombre=fiV("fap-n").trim(), meta=Math.max(0,Number(fiV("fap-m"))||0), fecha=fiV("fap-f");
