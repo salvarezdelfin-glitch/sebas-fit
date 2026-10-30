@@ -55,7 +55,7 @@ function ptTabProceso(c){
 
 /* ---------- rutinas de gimnasio (sin cliente) ---------- */
 function ptVistaTabs(){
-  return `<div class="tabs"><button data-action="pt-vista" data-v="clientes" class="${state.screen!=="gym"?"on":""}">Clientes</button><button data-action="pt-vista" data-v="plantillas" class="${state.screen==="gym"?"on":""}">Rutinas de gimnasio</button></div>`;
+  return `<div class="tabs"><button data-action="pt-vista" data-v="clientes" class="${state.screen!=="gym"&&state.screen!=="cotizador"?"on":""}">Clientes</button><button data-action="pt-vista" data-v="plantillas" class="${state.screen==="gym"?"on":""}">Rutinas de gimnasio</button><button data-action="go" data-screen="cotizador" class="${state.screen==="cotizador"?"on":""}">Cotizador</button></div>`;
 }
 const ptPlantillas=()=>PT_D().programas.filter(p=>!p.clienteId);
 function viewPlantillas(){

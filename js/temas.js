@@ -32,7 +32,7 @@ function temaElegir(metodo,cfg){
   const lista=temaLista(metodo); let pool=lista; if(metodo!=="fuerza"&&(cfg.modo!=="full"||(cfg.duracion&&cfg.duracion<=30))) pool=lista.filter(t=>!t.foco);   // los enfoques necesitan tiempo: no en clases de 30 min
   const pin=cfg.tema; if(pin&&pin!=="auto"){ const t=lista.find(x=>x.id===pin); if(t) return t; }
   const rec=((state.historia.temas||[]).filter(x=>x.m===metodo).map(x=>x.t));
-  const w=pool.map(t=>{ let p=t.peso||1; const i=rec.indexOf(t.id); if(i===0) p*=0.02; else if(i===1) p*=0.25; else if(i===2) p*=0.55; return p; });
+  const w=pool.map(t=>{ let p=t.peso||1; const i=rec.indexOf(t.id); if(i===0) p*=0.02; else if(i===1) p*=0.25; else if(i===2) p*=0.55; if(typeof fqTemaPeso==="function") p*=fqTemaPeso(metodo,t.id); return p; });
   let x=Math.random()*w.reduce((a,b)=>a+b,0); for(let i=0;i<pool.length;i++){ x-=w[i]; if(x<=0) return pool[i]; } return pool[0];
 }
 function temaRegistrar(r){
@@ -49,7 +49,7 @@ function claseHuella(r){
 }
 /* 0 = idéntica a las últimas, 1 = totalmente distinta */
 function claseNovedad(r){
-  const hs=(state.historia.huellas||[]).filter(x=>x.m===r.metodo).slice(0,3); if(!hs.length) return 1;
+  let hs=(state.historia.huellas||[]).filter(x=>x.m===r.metodo); if(BUMPED.has(r)) hs=hs.slice(1); hs=hs.slice(0,3); if(!hs.length) return 1;
   const h=claseHuella(r), A=new Set(h.refs); let pen=0;
   hs.forEach((x,i)=>{ const w=i===0?1:i===1?.6:.35; const B=new Set(x.refs); let inter=0; A.forEach(k=>{ if(B.has(k)) inter++; }); const jac=inter/Math.max(1,A.size+B.size-inter);
     pen+=w*(jac*2+(x.tema===h.tema&&h.tema?1.2:0)+(x.orden===h.orden?.5:0)+(x.leg&&x.leg===h.leg?.7:0)+(x.glu&&x.glu===h.glu?.7:0)+(x.reto&&x.reto===h.reto?.5:0)+(x.fin&&x.fin===h.fin?.6:0)); });

@@ -420,8 +420,9 @@ function freshSort(pool){
   const score=e=>(u[e.id]||0)+(aj[e.id]||0);
   return pool.map((e,i)=>[e,i]).sort((A,B)=>(score(A[0])-score(B[0]))||A[1]-B[1]).map(x=>x[0]);
 }
+const BUMPED=new WeakSet();   // clases que ya cuentan en el historial (para no calificarlas contra sí mismas)
 function bumpHistoria(r){
-  const h=state.historia;
+  const h=state.historia; BUMPED.add(r);
   h.sigs.unshift(routineSig(r)); h.sigs=h.sigs.slice(0,12);
   if(typeof temaRegistrar==="function") temaRegistrar(r);
   for(const k in h.uso){ h.uso[k]*=0.5; if(h.uso[k]<0.28) delete h.uso[k]; }
@@ -678,7 +679,7 @@ function generate(cfg){
   for(let i=0;i<N;i++){
     let r, t=0;
     do { r=_generate(cfg); t++; } while(t<4 && state.historia.sigs.includes(routineSig(r)));
-    const sc=N>1?claseCalidad(r).score+(typeof claseNovedad==="function"?claseNovedad(r)*18:0)+Math.random()*0.4:0;
+    const sc=N>1?claseCalidad(r).score+(typeof claseNovedad==="function"?claseNovedad(r)*(10+4*fqSesgo(cfg.metodo).rep):0)+Math.random()*0.4:0;
     if(!best||sc>bs){ best=r; bs=sc; }
   }
   if(best&&TM){ best.tema=TM.id; best.temaNom=TM.nom; best.temaDesc=TM.desc; }
@@ -1095,6 +1096,7 @@ function viewPlanner(){
           <button class="btn" data-action="regen">↻ Regenerar</button>
           <button class="btn" data-action="save">💾 Guardar</button>
           <button class="btn" data-action="asignar-clase">🗓 Asignar a clase</button>
+          <button class="btn" data-action="fq-abrir">💬 ¿Cómo se sintió?</button>
           <button class="btn" data-action="registrar-feedback">📋 Registrar clase</button>
         </div>
       </div>

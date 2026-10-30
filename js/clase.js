@@ -293,38 +293,61 @@ function estAjustarDuracion(r,cfg){
 function claseCambiosMaterial(r){
   let prev=null,c=0; r.sections.forEach(S=>{ if(S.kind==="prep"||S.kind==="cool") return; S.slots.forEach(s=>{ const e=resolve(s).eq; if(prev!==null&&e!==prev) c++; prev=e; }); }); return c;
 }
-function claseTarget(r){ return r.metodo==="fuerza"?(r.duracion||55)-3:r.metodo==="barre"?(r.duracion||50)-3:(r.duracion||45)-5; }
+function claseTarget(r){ const b=r.metodo==="fuerza"?(r.duracion||55)-3:r.metodo==="barre"?(r.duracion||50)-3:(r.duracion||45)-5; return b-fqSesgo(r.metodo).min; }
+/* lo que tú anotaste de tus últimas clases (feedback.js): sesga qué se considera "buena" */
+function fqSesgo(metodo){ return typeof fqSesgos==="function"?fqSesgos(metodo):{min:0,rep:0,ritmo:0,pes:0,lig:0}; }
+/* Puntaje estricto: mide en continuo (no basta con "no fallar"): 50 + 50·(cualidades logradas)^1.6 − defectos.
+   Un 90+ exige casi todo a la vez: duración exacta, pocos cambios de material, bloques parejos, variedad, ritmo distinto por bloque… */
 function claseCalidad(r){
-  const pts=[]; let pen=0; const add=(t,txt,p)=>{ pen+=p||0; pts.push({t,x:txt,p:p||0}); };
+  const pts=[]; let pen=0, bono=0, maxb=0;
+  const add=(t,txt,p)=>{ pen+=p||0; pts.push({t,x:txt,p:p||0}); }, cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const gain=(txt,val,max)=>{ bono+=val; maxb+=max; if(txt&&val/max>=0.7) pts.push({t:"ok",x:txt,p:0}); };
+  const sg=fqSesgo(r.metodo), nom=S=>S.nom.replace(/^Bloque \d+ · /,"");
   const est=estimateMinutes(r), obj=claseTarget(r), dev=Math.abs(est-obj);
-  if(dev<=2) add("ok","Duración ajustada: ≈ "+est+" min de "+r.duracion); else add("warn","Dura ≈ "+est+" min y pediste "+r.duracion+" (ideal ≈ "+obj+")",Math.min(25,(dev-2)*5));
-  const cm=claseCambiosMaterial(r), base=r.metodo==="fuerza"?6:8;
-  if(cm<=base) add("ok","Pocos cambios de material ("+cm+")"); else add("warn",cm+" cambios de material entre ejercicios",Math.min(15,(cm-base)*1.6));
-  const all=r.sections.filter(S=>S.kind!=="prep"&&S.kind!=="cool").flatMap(S=>S.slots), refs=all.map(s=>s.ref);
-  const llaves=all.filter(s=>!(s.q&&s.q.t==="trans")).map(s=>s.ref+"|"+(s.side||"")), dup=llaves.length-new Set(llaves).size;   // Lado A y Lado B repiten el ejercicio a propósito if(dup) add("warn","Hay "+dup+" ejercicio(s) repetido(s)",dup*10);
-  const u=state.historia.uso||{}, avg=refs.length?refs.reduce((a,x)=>a+(u[x]||0),0)/refs.length:0;
-  if(avg>0.55) add("warn","Muy parecida a tus últimas clases",Math.min(12,avg*9)); else add("ok","Variada respecto a tus últimas clases");
-  const work=r.sections.filter(S=>S.kind==="work");
+  gain("Duración ajustada: ≈ "+est+" min de "+r.duracion,6*cl(1-dev/3,0,1),6); if(dev>2) add("warn","Dura ≈ "+est+" min y pediste "+r.duracion+" (ideal ≈ "+obj+")",Math.min(30,(dev-1.5)*8));
+  const cm=claseCambiosMaterial(r), base=(r.metodo==="fuerza"?5:7)-sg.ritmo;
+  gain("Pocos cambios de material ("+cm+")",4*cl(1-Math.max(0,cm-1)/(base+3),0,1),4); if(cm>base) add("warn",cm+" cambios de material entre ejercicios",Math.min(18,(cm-base)*2));
+  const secs=r.sections.filter(S=>S.kind!=="prep"&&S.kind!=="cool"), all=secs.flatMap(S=>S.slots), refs=all.map(s=>s.ref);
+  const llaves=all.filter(s=>!(s.q&&s.q.t==="trans")&&!/Ráfaga final/.test(s.nota||"")).map(s=>s.ref+"|"+(s.side||"")), dup=llaves.length-new Set(llaves).size;   // Lado A y Lado B repiten el ejercicio a propósito
+  if(dup) add("warn","Hay "+dup+" ejercicio(s) repetido(s)",dup*8);
+  const u=state.historia.uso||{}, own=BUMPED.has(r)?1:0, avg=refs.length?refs.reduce((a,x)=>a+Math.max(0,(u[x]||0)-own),0)/refs.length:0, lim=0.4-sg.rep*0.06;
+  gain("Variada respecto a tus últimas clases",5*cl(1-avg/(lim*1.3),0,1),5); if(avg>lim) add("warn","Muy parecida a tus últimas clases",Math.min(14,2+(avg-lim)*14));
+  const work=r.sections.filter(S=>S.kind==="work"), fAvg=S=>S.slots.length?S.slots.reduce((a,s)=>a+((byId[s.ref]||{}).f||0),0)/S.slots.length:0;
+  const nivel=r.metodo==="fuerza"?r.objetivo:r.nivel, suave=nivel==="ligera"||nivel==="media";
+  const duros=all.filter(s=>((byId[s.ref]||{}).f||0)>=3).length; if(suave&&duros>2) add("warn","Varios ejercicios muy exigentes para una clase "+(nivel==="ligera"?"ligera":"media")+" ("+duros+")",Math.min(8,(duros-2)*2));
+  const fm=work.length?work.reduce((a,S)=>a+fAvg(S),0)/work.length:0;
+  if(sg.pes&&fm>2.05) add("warn","Anotaste que se sintieron pesadas: esta carga es alta",sg.pes*2); if(sg.lig&&fm<1.55&&r.metodo!=="barre") add("warn","Anotaste que se sintieron ligeras: esta carga es baja",sg.lig*2);
+  for(let i=1;i<work.length;i++) if(fAvg(work[i])>=2.5&&fAvg(work[i-1])>=2.5){ add("warn","Dos bloques muy pesados seguidos",3); break; }
+  const seg=work.map(S=>sectionSeconds(S,r)), mx=Math.max(...seg), mn=Math.min(...seg), ratio=mn>0?mx/mn:1, foco=/^foco/.test(r.tema||""), eqs=new Set(all.map(s=>resolve(s).eq).filter(e=>e&&e!=="peso corporal"));
   if(r.metodo==="fuerza"){
-    const pesado=r.objetivo==="pesada"||r.objetivo==="muypesada";
-    work.forEach(S=>{ const P=S.slots[0]; if(!P) return; if(r.v2){ if(P.rol!=="P") add("warn","Un bloque no empieza con su ejercicio principal",6);
-        else if(!byId[P.ref].comp&&S.bk!=="acc") add("warn","El principal de \""+S.nom.replace(/^Bloque \d+ · /,"")+"\" no es compuesto",5);
-        else if(pesado&&(P.eq==="liga"||P.eq==="peso corporal")) add("warn","El principal de \""+S.nom.replace(/^Bloque \d+ · /,"")+"\" tiene poca carga para dificultad "+objetivoOf(r.objetivo).nom.toLowerCase(),4); } });
-    const seg=work.map(S=>sectionSeconds(S,r)), mx=Math.max(...seg), mn=Math.min(...seg); if(mn>0&&mx/mn>1.8) add("warn","Los bloques quedaron desbalanceados en tiempo",6); else add("ok","Bloques equilibrados en tiempo");
-    const fams=work.flatMap(S=>S.slots.filter(x=>x.rol!=="A").map(x=>fzFam(byId[x.ref]))); const rep=fams.length-new Set(fams).size; if(rep>1) add("warn","Se repite el tipo de movimiento ("+rep+")",rep*3);
-    const fin=r.sections.find(S=>S.kind==="cardioFin"); if(!fin||fin.slots.length<2) add("warn","El finisher de cardio es muy corto",6);
+    const pesado=r.objetivo==="pesada"||r.objetivo==="muypesada"; let comp=0, nb=0;
+    work.forEach(S=>{ const P=S.slots[0]; if(!P) return; nb++; if(r.v2){ if(P.rol!=="P") add("warn","Un bloque no empieza con su ejercicio principal",6);
+        else if(!byId[P.ref].comp&&S.bk!=="acc") add("warn","El principal de \""+nom(S)+"\" no es compuesto",5);
+        else { comp++; if(pesado&&(P.eq==="liga"||P.eq==="peso corporal")) add("warn","El principal de \""+nom(S)+"\" tiene poca carga para dificultad "+objetivoOf(r.objetivo).nom.toLowerCase(),4); } } else comp++; });
+    gain("Cada bloque abre con un ejercicio principal compuesto",5*(nb?comp/nb:1),5);
+    gain("Bloques equilibrados en tiempo",5*cl(1-(ratio-1)/0.6,0,1),5); if(ratio>1.7) add("warn","Los bloques quedaron desbalanceados en tiempo",Math.min(8,(ratio-1.7)*8+3));
+    const fams=work.flatMap(S=>S.slots.filter(x=>x.rol!=="A").map(x=>fzFam(byId[x.ref]))); const rep=fams.length-new Set(fams).size; gain("Cada bloque trabaja un movimiento distinto",4*cl(1-rep/2,0,1),4); if(rep>1) add("warn","Se repite el tipo de movimiento ("+rep+")",rep*3);
+    const fin=r.sections.find(S=>S.kind==="cardioFin"); if(!fin||fin.slots.length<2) add("warn","El finisher de cardio es muy corto",6); gain("Finisher de cardio completo",3*cl(((fin&&fin.slots.length)||0)/4,0,1),3);
+    gain("Material manejable ("+eqs.size+" tipos)",3*cl((5-eqs.size)/2,0,1),3); if(eqs.size>4) add("warn","Usa "+eqs.size+" tipos de material distintos",(eqs.size-4)*2);
   } else if(r.estilo==="estacion"){
-    work.forEach(S=>{ const n=S.slots.length; if(n<4&&S.bk!=="abs"&&S.bk!=="plk") add("warn","\""+S.nom.replace(/^Bloque \d+ · /,"")+"\" quedó con pocos pasos ("+n+")",3); if(n>9) add("warn","\""+S.nom.replace(/^Bloque \d+ · /,"")+"\" tiene demasiados pasos ("+n+")",3); });
+    work.forEach(S=>{ const n=S.slots.length; if(n<4&&S.bk!=="abs"&&S.bk!=="plk") add("warn","\""+nom(S)+"\" quedó con pocos pasos ("+n+")",3); if(n>9) add("warn","\""+nom(S)+"\" tiene demasiados pasos ("+n+")",3);
+      const tipos=new Set(S.slots.map(s=>s.q&&s.q.t)); if(n>=5&&tipos.size===1&&S.bk!=="abs") add("warn","\""+nom(S)+"\" es monótono: todo con el mismo tipo de conteo",2); });
+    const firmas=work.map(S=>S.slots.map(s=>s.q&&s.q.t).join(">")), igual=firmas.length-new Set(firmas).size;
+    const tp=work.length?work.reduce((a,S)=>a+new Set(S.slots.map(s=>s.q&&s.q.t)).size,0)/work.length:0;
+    gain("Cada bloque cuenta distinto (holds, pulsos, tempos)",4*cl(tp/3,0,1)*(igual?0.5:1),4); if(igual>0) add("warn","Dos bloques tienen exactamente la misma estructura de conteo",3*igual);
     let racha=0,mxr=0; all.forEach(s=>{ const q=s.q&&s.q.t; racha=q==="hold"?racha+1:0; mxr=Math.max(mxr,racha); }); if(mxr>=3) add("warn","Hay "+mxr+" holds seguidos",4);
-    if(r.duracion>=45&&!r.sections.some(S=>S.bk==="cierre")) add("warn","Falta el cierre con relajación",5);
-    if(typeof aprBoostId==="function"){ const af=work.map(S=>S.anchor?aprBoostId(S.anchor):0); const b=af.reduce((a,x)=>a+x,0)/Math.max(1,af.length); if(b>0.1) add("ok","Sigue tu formato (estaciones que sueles dar)"); }
+    const tieneCierre=r.sections.some(S=>S.bk==="cierre"); if(r.duracion>=45&&!tieneCierre) add("warn","Falta el cierre con relajación",5); gain(r.duracion>=45?"Cierra con relajación":"",3*(tieneCierre?1:0),r.duracion>=45?3:0);
+    if(!foco){ gain("Bloques equilibrados en tiempo",5*cl(1-(ratio-1)/1.4,0,1),5); if(ratio>2) add("warn","Los bloques quedaron desbalanceados en tiempo",Math.min(8,(ratio-2)*6+2)); }   // los temas de enfoque agrandan un bloque a propósito
+    gain("Material manejable ("+eqs.size+" tipos)",3*cl((6-eqs.size)/3,0,1),3); if(eqs.size>4) add("warn","Usa "+eqs.size+" tipos de material distintos",(eqs.size-4)*2);
+    if(typeof aprBoostId==="function"){ const af=work.map(S=>S.anchor?aprBoostId(S.anchor):0); const b=af.reduce((a,x)=>a+x,0)/Math.max(1,af.length); gain("Sigue tu formato (estaciones que sueles dar)",4*cl(b/0.25,0,1),4); }
   }
-  const score=Math.max(0,Math.min(100,Math.round(100-pen)));
+  if(r.metodo!=="barre"&&typeof claseNovedad==="function") gain("Se siente distinta a tus últimas clases (tema, orden, finisher)",5*claseNovedad(r),5);
+  const frac=maxb?bono/maxb:1, score=Math.max(0,Math.min(100,Math.round(50+50*Math.pow(frac,1.6)-pen)));
   return {score,notas:pts,pen};
 }
 function claseCalidadHtml(r){
   if(r.metodo==="barre") return "";
-  const q=claseCalidad(r), col=q.score>=85?"var(--ok,#7fb77e)":q.score>=70?"var(--warn,#e3ab52)":"#d65454", malas=q.notas.filter(n=>n.t==="warn"), buenas=q.notas.filter(n=>n.t==="ok");
+  const q=claseCalidad(r), col=q.score>=85?"var(--ok,#7fb77e)":q.score>=72?"var(--warn,#e3ab52)":"#d65454", malas=q.notas.filter(n=>n.t==="warn"), buenas=q.notas.filter(n=>n.t==="ok");
   return `<div class="cal-card"><div class="cal-top"><div class="cal-score" style="--c:${col}"><b>${q.score}</b><small>/100</small></div><div><b>Calidad de la clase</b><div class="cal-bar"><i style="width:${q.score}%;background:${col}"></i></div></div></div>
-    <div class="cal-notes">${malas.map(n=>`<span class="cal-n warn">⚠ ${esc(n.x)}</span>`).join("")}${buenas.slice(0,4).map(n=>`<span class="cal-n ok">✔ ${esc(n.x)}</span>`).join("")}</div></div>`;
+    <div class="cal-notes">${malas.map(n=>`<span class="cal-n warn">⚠ ${esc(n.x)}</span>`).join("")}${buenas.slice(0,4).map(n=>`<span class="cal-n ok">✔ ${esc(n.x)}</span>`).join("")}</div>${typeof fqResumen==="function"&&fqResumen(r.metodo)?`<p class="hint" style="margin:8px 0 0">💬 ${esc(fqResumen(r.metodo))}</p>`:""}</div>`;
 }

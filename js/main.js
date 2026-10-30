@@ -3,7 +3,7 @@
    MAIN · Sebas Fit — navegación, ajustes, acceso y arranque
    ============================================================ */
 const NAV_TODO=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio","planner","armar","formato","playlists","guardadas"],"inicio"],
-  ["clientes","Clientes",["clientes","cliente"],"clientes"],["gym","Gym",["gym","plantilla"],"gym"],["cotizador","Cotizador",["cotizador"],"cotizador"],["finanzas","Finanzas",["finanzas"],"finanzas"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
+  ["clientes","Clientes",["clientes","cliente","gym","plantilla","cotizador"],"clientes"],["finanzas","Finanzas",["finanzas"],"finanzas"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
 const SOLO_FIN=window.APP_MODE==="finanzas";   // /finanzas/ = la misma app, abierta solo en Finanzas (se instala aparte como "Bolsillo")
 const NAV=SOLO_FIN?NAV_TODO.filter(n=>n[0]==="finanzas"||n[0]==="ajustes"):NAV_TODO;
 const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["formato","Mi formato"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
@@ -67,7 +67,7 @@ function render(){
   else if(s==="gym") h=viewPlantillas();
   else if(s==="cliente") h=viewCliente();
   else if(s==="plantilla") h=viewPlantilla();
-  else if(s==="cotizador") h=viewCotizador();
+  else if(s==="cotizador") h=`<div class="wrap subnav">${ptVistaTabs()}</div>`+viewCotizador();
   else if(s==="finanzas") h=viewFinanzas();
   else if(s==="yo") h=viewYo();
   else if(s==="ajustes") h=viewAjustes();
@@ -86,16 +86,14 @@ function viewAjustes(){
       <p class="hint" style="margin-top:0">Todo se guarda cifrado en este dispositivo y en la nube (con historial de versiones). Tienes ${n.cl} clases, ${n.cli} clientes, ${n.ses} sesiones, ${n.rut} rutinas guardadas y ${n.cot} cotizaciones.</p>
       <div class="acts-row"><button class="btn" data-action="aj-sync">☁ Subir ahora</button><button class="btn" data-action="aj-backup">⬇ Descargar respaldo</button><button class="btn" data-action="aj-restore">⬆ Cargar respaldo</button>
       <input type="file" id="aj-file" accept="application/json,.json" hidden></div>
-      <p class="hint">El respaldo es un archivo cifrado con tu contraseña; solo se puede abrir aquí.</p></div></section>
+      <p class="hint">El respaldo es un archivo cifrado con tu contraseña; solo se puede abrir aquí.</p>${respAjustesHtml()}</div></section>
     <section class="blk"><div class="blk-head"><h2>Seguridad</h2></div><div class="card"><p class="hint" style="margin-top:0">"Recordar en este dispositivo" guarda la llave en este equipo para no pedir la contraseña. Ciérrala si compartes el equipo.</p>
       <div class="acts-row"><button class="btn" data-action="aj-lock">Cerrar sesión en este dispositivo</button></div></div></section>
     <p class="hint" style="text-align:center;margin:24px 0 40px">Sebas Fit · v1</p></div>`;
 }
-async function ajClick(a){
+async function ajClick(a,t){
+  if(a==="aj-backup"||a.startsWith("aj-resp-")) return respClick(a,t);
   if(a==="aj-sync"){ await flushVault(); await pushCloud(); toast("Sincronizado"); return true; }
-  if(a==="aj-backup"){
-    const blob=await backupBlob(), el=document.createElement("a");
-    el.href=URL.createObjectURL(new Blob([JSON.stringify(blob)],{type:"application/json"})); el.download="sebas-fit-respaldo-"+todayStr()+".json"; document.body.appendChild(el); el.click(); el.remove(); return true; }
   if(a==="aj-restore"){ document.getElementById("aj-file").click(); return true; }
   if(a==="aj-lock"){ vaultLock(); return true; }
   if(a==="aj-hint-off"){ lsSet("sbf_hint_off","1"); render(); return true; }
@@ -117,6 +115,8 @@ const Mods={
   click(a,t,e){
     if(a.startsWith("cl-")) return clClick(a,t);
     if(a.startsWith("ci-")) return ciClick(a,t);
+    if(a.startsWith("es-")) return esClick(a,t);
+    if(a.startsWith("fq-")) return fqClick(a,t);
     if(a.startsWith("pt-")) return ptClick(a,t,e);
     if(a.startsWith("ct-")) return ctClick(a,t);
     if(a.startsWith("ar-")) return arClick(a,t);
@@ -124,7 +124,7 @@ const Mods={
     if(a.startsWith("mu-")) return musClick(a,t);
     if(a.startsWith("yo-")) return yoClick(a,t);
     if(a.startsWith("fi-")) return fiClick(a,t);
-    if(a.startsWith("aj-")){ ajClick(a); return true; }
+    if(a.startsWith("aj-")){ ajClick(a,t); return true; }
     if(a==="go-cot"){ COTUI.draft=cotDraftNuevo(t.dataset.id||null); COTUI.tab="nueva"; state.screen="cotizador"; render(); window.scrollTo(0,0); return true; }
     if(a==="asignar-clase"){ if(!state.routine) return true; state.modal={type:"asignar"}; renderOverlay(); return true; }
     if(a==="asignar-ok"){ const e2=clAsignarRutina(t.dataset.date,t.dataset.slot,state.routine.nombre); aprAprobar(state.routine); closeModal(); render(); toast(e2?"Rutina asignada a la clase":"No se pudo asignar"); return true; }
@@ -142,6 +142,7 @@ const Mods={
   },
   change(a,t){
     if(a.startsWith("cl-")) return clChange(a,t);
+    if(a.startsWith("es-")) return esChange(a,t);
     if(a.startsWith("pt-")) return ptChange(a,t);
     if(a.startsWith("ct-")) return ctChange(a,t);
     if(a.startsWith("ar-")) return arChange(a,t);
@@ -151,6 +152,7 @@ const Mods={
   modal(md){
     if(md.type.startsWith("fi-")) return fiModal(md);
     if(md.type==="asignar") return modalAsignar();
+    if(md.type==="fq") return fqModal(md);
     if(md.type.startsWith("pt-")) return ptModal(md);
     if(md.type.startsWith("yo-")) return yoModal(md);
     return "";
