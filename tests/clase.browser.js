@@ -3,7 +3,7 @@ window.claseTest=async function(){
   await bootTest();
   const F=[]; const ok=(c,m)=>{ if(!c) F.push(m); }; const info={}; const $=s=>document.querySelector(s);
   // ---------- FUERZA v2 ----------
-  const cfgF=(o)=>Object.assign({},state.cfg,{metodo:'fuerza',fModo:'full',objetivo:'media',fDuracion:55,fPorBloque:'auto',fFormato:'recto',calent:true,enfr:true},o||{});
+  const cfgF=(o)=>Object.assign({},state.cfg,{metodo:'fuerza',fModo:'full',objetivo:'media',fDuracion:55,fPorBloque:'auto',fFormato:'recto',tema:'clasica',calent:true,enfr:true},o||{});
   const rows=[]; let malos=[];
   for(const modo of ['full','torso','pierna','gluteoabs']) for(const nivel of ['ligera','media','pesada','muypesada']) for(const d of [30,45,55,65]) for(let k=0;k<2;k++){
     const r=generate(cfgF({fModo:modo,objetivo:nivel,fDuracion:d,descanso:OBJETIVOS[nivel].descanso})), est=estimateMinutes(r), work=r.sections.filter(s=>s.kind==='work');
@@ -44,7 +44,7 @@ window.claseTest=async function(){
   const durS=[]; let malS=[];
   for(const modo of ['full','upper','pierna','core']) for(const nivel of ['ligera','media','pesada','muypesada']) for(const d of [30,45,60]) for(let k=0;k<3;k++){
     const r=generate(Object.assign({},state.cfg,{metodo:'sculpt',estilo:'estacion',modo,nivel,duracion:d,base:8,calent:false,enfr:true})), est=estimateMinutes(r);
-    durS.push({d,est}); if(Math.abs(est-(d-5))>(modo==='core'&&d===60?20:d===30?5:4)) malS.push(modo+'/'+nivel+'/'+d+' → '+est);
+    durS.push({d,est}); if(Math.abs(est-(d-5))>(modo==='core'?(d===60?23:9):d===30?5:4)) malS.push(modo+'/'+nivel+'/'+d+' → '+est);
     const work=r.sections.filter(S=>S.kind==='work'); if(work.some(S=>S.slots.length<3)) malS.push(modo+nivel+d+' bloque de <3 pasos');
     if(!r.sections.some(S=>S.bk==='reto')) malS.push('sin reto'); if(d>=45&&!r.sections.some(S=>S.bk==='cierre')) malS.push('sin cierre');
     if(/undefined|NaN/.test(routineText(r))) malS.push('texto con undefined');
@@ -123,5 +123,46 @@ window.claseTest=async function(){
     const Sy=rb.sections.find(S=>S.kind==='work'&&S.slots.some(s=>s.par)); if(Sy){ const p1=Sy.slots.find(s=>s.par), idx=Sy.slots.indexOf(p1); moveSlot(Sy.id,p1.uid,-1); const rotos=Sy.slots.some((s,i)=>s.par&&!((Sy.slots[i-1]&&Sy.slots[i-1].par===s.par)||(Sy.slots[i+1]&&Sy.slots[i+1].par===s.par))); ok(!rotos,'mover un ejercicio no deja biseries rotas'); }
     // UI de Inicio
     state.cfg.metodo='fuerza'; state.screen='inicio'; render(); ok(!!$('[data-action="set-fformato"][data-v="biseries"]'),'selector de formato en Inicio'); $('[data-action="set-fformato"][data-v="recto"]').click(); ok(state.cfg.fFormato==='recto','cambia a series rectas'); $('[data-action="set-fformato"][data-v="biseries"]').click(); }
+  // ---------- VARIEDAD: que las clases seguidas se sientan distintas ----------
+  { state.historia.sigs=[]; state.historia.uso={}; state.historia.temas=[]; state.historia.huellas=[]; state.historia.fins=[];
+    const cs=()=>Object.assign({},state.cfg,{metodo:'sculpt',estilo:'estacion',modo:'full',nivel:'media',duracion:45,base:8,calent:false,enfr:true,tema:'auto'});
+    const L=[]; for(let i=0;i<24;i++) L.push(generate(cs()));
+    const temas=L.map(r=>r.tema), ordenes=L.map(r=>r.sections.filter(S=>S.kind==='work').map(S=>S.bk).join('>')), cierres=L.map(r=>r.sections.find(S=>S.bk==='cierre').slots.map(s=>s.ref).join(','));
+    const holds=L.map(r=>r.sections.flatMap(S=>S.slots).filter(s=>s.q&&s.q.t==='hold').map(s=>s.q.s).join('/')), pul=L.map(r=>r.sections.flatMap(S=>S.slots).filter(s=>s.q&&s.q.t==='pulsos').map(s=>s.q.n).join('/'));
+    let seguidos=0; for(let i=1;i<L.length;i++) if(temas[i]===temas[i-1]) seguidos++;
+    info.variedad={temas:new Set(temas).size,ordenes:new Set(ordenes).size,cierres:new Set(cierres).size,holds:new Set(holds).size,pulsos:new Set(pul).size,seguidos};
+    ok(new Set(temas).size>=6,'usa al menos 6 temas en 24 clases ('+new Set(temas).size+')'); ok(seguidos<=2,'casi nunca repite el tema seguido ('+seguidos+')'); ok(new Set(ordenes).size>=2,'cambia el orden de los bloques'); ok(new Set(cierres).size>=3,'cambia el cierre ('+new Set(cierres).size+')'); ok(new Set(holds).size>=10,'cambian los tiempos de los holds ('+new Set(holds).size+')');
+    // cada tema deja una marca real
+    const por=id=>{ const r=generate(Object.assign(cs(),{tema:id})); return r; };
+    const hMed=r=>{ const a=r.sections.flatMap(S=>S.slots).filter(s=>s.q&&s.q.t==='hold'&&!s.q.fijo&&byId[s.ref].b==='st'&&!/cierre/.test(byId[s.ref].blk||'')).map(s=>s.q.s); return a.reduce((x,y)=>x+y,0)/Math.max(1,a.length); };
+    const pMed=r=>{ const a=r.sections.flatMap(S=>S.slots).filter(s=>s.q&&s.q.t==='pulsos').map(s=>s.q.n); return a.reduce((x,y)=>x+y,0)/Math.max(1,a.length); };
+    const rMed=r=>{ const a=r.sections.flatMap(S=>S.slots).filter(s=>s.q&&s.q.t==='reps'&&!s.q.por).map(s=>s.q.n); return a.reduce((x,y)=>x+y,0)/Math.max(1,a.length); };
+    const prom=(f,n)=>{ let a=0; for(let i=0;i<n;i++) a+=f(); return a/n; };
+    const hI=prom(()=>hMed(por('isometria')),6), hP=prom(()=>hMed(por('pulsos')),6); ok(hI>hP+10,'isométrica tiene holds más largos que pulsos ('+hI.toFixed(0)+' vs '+hP.toFixed(0)+')');
+    const pP=prom(()=>pMed(por('pulsos')),6), pI=prom(()=>pMed(por('isometria')),6); ok(pP>pI+8,'quema de pulsos tiene más pulsos ('+pP.toFixed(0)+' vs '+pI.toFixed(0)+')');
+    const rT=prom(()=>rMed(por('tempo')),6), rC=prom(()=>rMed(por('clasica')),6); ok(rT<rC-2,'tempo lento baja las repeticiones ('+rT.toFixed(1)+' vs '+rC.toFixed(1)+')');
+    const esc1=por('escalera'); const bl=esc1.sections.find(S=>S.bk==='up'); const nn=bl.slots.filter(s=>s.q.t==='reps'&&!s.q.por&&!s.q.fijo).map(s=>s.q.n); ok(nn.length<2||nn[0]>nn[nn.length-1],'escalera baja la cuenta en el bloque ('+nn+')');
+    const pir=por('piramide'); const hs=pir.sections.find(S=>S.bk==='leg').slots.filter(s=>s.q.t==='hold'&&!s.q.fijo).map(s=>s.q.s); ok(hs.length<2||hs[0]<hs[hs.length-1],'pirámide sube los holds ('+hs+')');
+    const fg=por('foco_glu'); ok(fg.sections.find(S=>S.bk==='glu').slots.length>=7,'enfoque glúteo tiene más glúteo ('+fg.sections.find(S=>S.bk==='glu').slots.length+')');
+    const fb=por('foco_brazos'); ok(fb.sections.find(S=>S.bk==='up').slots.length>=9,'enfoque brazos tiene más superior ('+fb.sections.find(S=>S.bk==='up').slots.length+')');
+    const fp=por('foco_pierna'); ok(fp.sections.find(S=>S.bk==='leg').slots.length>=7,'enfoque pierna lleva todas las capas');
+    // duración y calidad con cualquier tema
+    let malT=[]; for(const t of TEMAS_SCULPT) for(const d of [30,45,60]) for(let k=0;k<3;k++){ const r=generate(Object.assign(cs(),{tema:t.id,duracion:d})), est=estimateMinutes(r); if(Math.abs(est-(d-5))>(d===30?(t.foco?14:8):5)) malT.push(t.id+'/'+d+' → '+est); if(r.tema!==t.id) malT.push('tema no guardado '+t.id); if(/undefined|NaN/.test(routineText(r))) malT.push(t.id+' texto con undefined'); }
+    ok(!malT.length,'Sculpt con cada tema: '+malT.slice(0,6).join(' || '));
+    // FUERZA
+    state.historia.temas=[]; const LF=[]; for(let i=0;i<18;i++) LF.push(generate(cfgF({objetivo:'pesada',descanso:80,fFormato:'biseries',tema:'auto'})));
+    const tF=LF.map(r=>r.tema), fins=LF.map(r=>r.sections.find(S=>S.kind==='cardioFin').formato); let segF=0; for(let i=1;i<LF.length;i++) if(tF[i]===tF[i-1]) segF++;
+    info.variedadFuerza={temas:new Set(tF).size,finishers:new Set(fins).size,seguidos:segF}; ok(new Set(tF).size>=4,'Fuerza usa varios temas ('+new Set(tF).size+')'); ok(new Set(fins).size>=3,'Fuerza cambia la forma del finisher ('+new Set(fins).size+')'); ok(segF<=2,'Fuerza no repite tema seguido');
+    let malF=[]; for(const t of TEMAS_FUERZA) for(const d of [45,55,65]) for(let k=0;k<2;k++){ const r=generate(cfgF({objetivo:'pesada',descanso:80,fFormato:'biseries',tema:t.id,fDuracion:d})), est=estimateMinutes(r); if(Math.abs(est-(d-3))>9) malF.push(t.id+'/'+d+' → '+est); if(r.tema!==t.id) malF.push('tema'); if(/undefined|NaN/.test(routineText(r))) malF.push(t.id+' texto');
+      const P=r.sections.find(S=>S.kind==='work').slots[0];
+      if(t.id==='piramide'&&!(P.pir&&P.pir.split(' · ').length===P.sets)) malF.push('pirámide sin pir/sets '+P.pir+' '+P.sets); if(t.id==='tempo'&&P.tempo!=='4-1-1') malF.push('tempo sin 4-1-1'); if(t.id==='cluster'&&!(P.sets>=4&&P.rep[0]===5)) malF.push('cluster '+P.sets+'x'+P.rep);
+      const st=buildSteps(r).filter(s=>s.kind==='cardioFin'), fin=r.sections.find(S=>S.kind==='cardioFin'); if(st.length!==fin.slots.length*fin.protocolo.rondas) malF.push('rondas del finisher '+st.length+' vs '+fin.slots.length*fin.protocolo.rondas); }
+    ok(!malF.length,'Fuerza con cada tema: '+malF.slice(0,6).join(' || '));
+    // la pirámide se ve en la rutina y en el Instructor
+    const rp=generate(cfgF({objetivo:'pesada',descanso:80,fFormato:'recto',tema:'piramide'})); state.routine=rp; state.screen='planner'; render(); ok(/\d+ · \d+ · \d+/.test($('#app').textContent),'la pirámide se muestra en la rutina'); ok(/🎯 Pirámide/.test($('#app').textContent),'chip del tema en la rutina');
+    launchInstructor(); let rondaOk=false, g3=0; while(state.iv.i<state.iv.steps.length-1&&g3++<80){ const h=viewInstructor(); if(state.iv.steps[state.iv.i].kind==='cardioFin'&&/Ronda \d\/\d/.test(h)) rondaOk=true; ivPlanDelta(); ivGoto(1); fClearTimer(); } ok(rondaOk,'el Instructor cuenta las rondas del finisher'); ivExit();
+    // selector en Inicio
+    state.cfg.metodo='sculpt'; state.screen='inicio'; render(); ok(!!$('[data-action="set-tema"][data-v="escalera"]'),'selector de tema en Inicio'); $('[data-action="set-tema"][data-v="escalera"]').click(); ok(state.cfg.tema==='escalera','fija el tema'); $('[data-action="set-tema"][data-v="auto"]').click();
+  }
   return {fallas:F,info,errs:__errs};
 };

@@ -27,18 +27,19 @@ const FZ_RIR={P:"deja 1–2 repeticiones en reserva",S:"deja 2 en reserva",A:"ll
 /* configuración de un ejercicio de fuerza (clases viejas sin rol usan lo general de la rutina) */
 function fSlot(s,r){
   const ob=objetivoOf(r.objetivo);
+  if(s.pir){ const nums=String(s.pir).match(/\d+/g).map(Number); return {sets:s.sets||nums.length,rep:s.pir,mid:nums.reduce((a,b)=>a+b,0)/nums.length,rest:s.rest||r.descanso,rol:s.rol||null,pir:true}; }
   const rep=s.rep||null, lo=rep?rep[0]:null, hi=rep?rep[1]:null;
   return {sets:s.sets||r.series, rep:rep?(lo===hi?String(lo):lo+"–"+hi):r.rango, mid:rep?(lo+hi)/2:ob.mid, rest:s.rest||r.descanso, rol:s.rol||null};
 }
-function fzRepSeg(e){ const t=e&&e.tempo?String(e.tempo).split("-").reduce((a,b)=>a+(+b||0),0):0; return t>=3?t:3.2; }
+function fzRepSeg(e,s){ const tp=(s&&s.tempo)||(e&&e.tempo)||"", t=tp?String(tp).split("-").reduce((a,b)=>a+(+b||0),0):0; return t>=3?t:3.2; }
 /* tiempo real de un ejercicio: series + descansos + acomodar el material y cuear */
 function fzSlotSeg(s,r){
   const f=fSlot(s,r), e=byId[s.ref], reps=f.mid*(e&&e.lado?2:1);
-  return f.sets*(reps*fzRepSeg(e)+10)+(f.sets-1)*f.rest+20;
+  return f.sets*(reps*fzRepSeg(e,s)+10)+(f.sets-1)*f.rest+20;
 }
 function fzCardioSeg(n,p){ return n*(p.work+p.rest)*p.rondas+40; }
 /* una biserie: A y B se alternan sin descanso entre ellos y se descansa al terminar los dos */
-function fzTrabajo(s,r){ const f=fSlot(s,r), e=byId[s.ref]; return f.mid*(e&&e.lado?2:1)*fzRepSeg(e)+10; }
+function fzTrabajo(s,r){ const f=fSlot(s,r), e=byId[s.ref]; return f.mid*(e&&e.lado?2:1)*fzRepSeg(e,s)+10; }
 function fzParSeg(a,b,r){ const fa=fSlot(a,r), fb=fSlot(b,r), sets=Math.min(fa.sets,fb.sets); return sets*(fzTrabajo(a,r)+fzTrabajo(b,r)+15)+(sets-1)*Math.max(fa.rest,fb.rest)+25; }
 /* tiempo de un bloque de fuerza (agrupa las biseries) */
 function fzSecSeg(S,r){
@@ -47,6 +48,7 @@ function fzSecSeg(S,r){
 /* si se quita o se mueve un ejercicio, una biserie debe seguir siendo de dos ejercicios seguidos */
 /* los dos ejercicios de una biserie comparten series y descanso */
 function fzHarmonizar(r){
+  r.sections.forEach(S=>S.slots.forEach(x=>{ if(x.pir){ const a=x.pir.split(" · "); if(a.length!==x.sets) x.pir=a.slice(Math.max(0,a.length-x.sets)).join(" · "); } }));
   r.sections.forEach(S=>{ if(S.kind!=="work") return; for(let k=0;k<S.slots.length-1;k++){ const a=S.slots[k], b=S.slots[k+1]; if(a.par&&b.par===a.par){ a.sets=b.sets=Math.min(a.sets,b.sets); a.rest=b.rest=Math.max(a.rest,b.rest); k++; } } });
 }
 function fzNormalizarPares(r){
@@ -110,27 +112,15 @@ function fzCalentamiento(modo){
   const set=modo==="torso"?up:modo==="pierna"||modo==="gluteoabs"?low:full;
   return pick(set).map(slot);
 }
-function fzFinisher(minCardio,dif){
-  const fuertes=LIB.filter(e=>e.b==="cardio"), usadas=new Set(), out=[];
-  const orden=[0,0,2];                                   // dos de pie y una en el piso al final
-  const n=minCardio>=8?3:minCardio>=5?3:2;
-  const rondas=minCardio>=8?3:2, work=dif==="muypesada"?45:40, rest=dif==="ligera"?25:dif==="muypesada"?15:20;
-  for(let i=0;i<n;i++){
-    const pool=shuffle(fuertes.filter(e=>(e.f||0)===orden[i]&&!usadas.has(fzFam(e))&&!usadas.has(e.id)));
-    const e=pool[0]||shuffle(fuertes.filter(x=>!usadas.has(x.id)))[0]; if(!e) continue; usadas.add(e.id); usadas.add(fzFam(e)); out.push(e);
-  }
-  return {slots:out.map(slot),protocolo:{work,rest,rondas}};
-}
-
 /* ---------- generador ---------- */
-function fzNuevo(e,rol,F,rest){ const x=slot(e), pr=F[rol]; x.rol=rol; x.sets=pr.sets; x.rep=pr.rep.slice(); x.rest=rest(rol); return x; }
+function fzNuevo(e,rol,F,rest){ const x=slot(e), pr=F[rol]; x.rol=rol; x.sets=pr.sets; x.rep=pr.rep.slice(); x.rest=rest(rol); if(typeof temaFzSlot==="function") temaFzSlot(x,rol); return x; }
 function fzBloque(sd,cfg,dif,F,rest,ctx,used,budget,minEj,manual){
   const pools=fzRolPools(sd.key,cfg.fModo), bis=cfg.fFormato==="biseries", slots=[]; let t=0, gid=0;
-  const unidades=bis?[["P"],["S","A"],["A","A"]]:[["P"],["S"],["A"],["A"]];
+  let unidades=bis?[["P"],["S","A"],["A","A"]]:[["P"],["S"],["A"],["A"]]; if(FZ_TEMA&&FZ_TEMA.id==="cluster") unidades=unidades.slice(0,2);
   const elegir=(rol,propios)=>{ const cand=fzTodos(pools[rol]).filter(e=>!used.has(e.id)&&!slots.some(s=>s.ref===e.id)&&!propios.some(s=>s.ref===e.id)); if(!cand.length) return null; cand.sort((a,b)=>fzScore(b,rol,dif,ctx)-fzScore(a,rol,dif,ctx)); return cand[0]; };
   for(const u of unidades){
     if(manual&&slots.length>=manual) break;
-    const nuevos=[]; for(const rol of u){ const e=elegir(rol,nuevos); if(!e) break; const x=fzNuevo(e,rol,F,rest); if(rol==="P") x.nota="Haz 1–2 series de aproximación al 50 % y 70 % antes de la primera serie de trabajo"; nuevos.push(x); }
+    const nuevos=[]; for(const rol of u){ const e=elegir(rol,nuevos); if(!e) break; const x=fzNuevo(e,rol,F,rest); if(rol==="P") x.nota=(x.nota?x.nota+" · ":"")+"Haz 1–2 series de aproximación al 50 % y 70 % antes de la primera serie de trabajo"; nuevos.push(x); }
     if(!nuevos.length) continue;
     let seg;
     if(nuevos.length===2){
@@ -177,11 +167,12 @@ function fzExpandir(r,cfg,dif,F,rest,ctx,used,objSeg){
   }
 }
 function generateFuerza2(cfg){
+  const tema=temaPorId("fuerza",cfg._tema); FZ_TEMA=tema; if(tema.id==="densidad") cfg=Object.assign({},cfg,{fFormato:"biseries"});
   const mode=MODES.fuerza[cfg.fModo], dif=OBJETIVOS[cfg.objetivo]?cfg.objetivo:"media", dur=cfg.fDuracion||55, F=FZ_DIF[dif];
   const ob=objetivoOf(dif), descanso=cfg.descanso||ob.descanso, custom=descanso!==ob.descanso;
   const rest=rol=>custom?Math.max(20,Math.round(descanso*(rol==="P"?1:rol==="S"?.75:.55)/5)*5):F[rol].rest;
   const sections=[], prepSecs=cfg.calent?240:0, coolSecs=cfg.enfr?180:0;
-  const cardioMin=dur>=60?8:dur>=50?7:dur>=40?5:4, fin=fzFinisher(cardioMin,dif), cardioSecs=fzCardioSeg(fin.slots.length,fin.protocolo);
+  const cardioMin=dur>=60?8:dur>=50?7:dur>=40?5:4, fin=fzFinisher(cardioMin,dif,fzFinFormato()), cardioSecs=fzCardioSeg(fin.slots.length,fin.protocolo);
   const objSeg=Math.max(15*60,(dur-3)*60*claseRitmoInv()), nb=mode.secs.length, fijo=prepSecs+coolSecs+cardioSecs;
   const presupuesto=Math.max(7*60,(objSeg-fijo)/nb), ctx={fams:new Set(),mat:null}, used=new Set();
   const manual=cfg.fPorBloque&&cfg.fPorBloque!=="auto"?+cfg.fPorBloque:0, minEj=dur>=45?2:1;
@@ -194,15 +185,16 @@ function generateFuerza2(cfg){
     sobra=Math.max(-presupuesto*.3,budget-B.t);
     sections.push({id:rid(),nom:`Bloque ${bi+1} · ${sd.nom.replace(/^Bloque \d+ · /,"")}`,tag:sd.tag,kind:"work",slots:B.slots});
   });
-  sections.push({id:rid(),nom:"Finisher · Cardio metabólico",tag:"cardio",kind:"cardioFin",protocolo:fin.protocolo,slots:fin.slots});
+  sections.push({id:rid(),nom:"Finisher · "+fin.nom,tag:"cardio",kind:"cardioFin",protocolo:fin.protocolo,formato:fin.formato,slots:fin.slots});
   if(cfg.enfr) sections.push({id:rid(),nom:"Enfriamiento",tag:"prep",kind:"cool",slots:stableFlow(shuffle(LIB.filter(e=>e.b==="cool"&&!e.barre)).slice(0,4).map(slot))});
-  const pr0=F.P, r={id:rid(),metodo:"fuerza",v2:true,nombre:`Fuerza · ${mode.nom} · ${dur} min`,fModo:cfg.fModo,objetivo:dif,rango:pr0.rep[0]+"–"+pr0.rep[1],series:pr0.sets,descanso,
+  const pr0=F.P, r={id:rid(),metodo:"fuerza",v2:true,tema:tema.id,temaNom:tema.nom,temaDesc:tema.desc,nombre:`Fuerza · ${mode.nom} · ${dur} min${tema.id!=="clasica"?" · "+tema.nom:""}`,fModo:cfg.fModo,objetivo:dif,rango:pr0.rep[0]+"–"+pr0.rep[1],series:pr0.sets,descanso,
     duracion:dur,formato:cfg.fFormato==="biseries"?"biseries":"recto",porBloque:0,sections,creada:Date.now()};
   if(!manual){ fzComprimir(r,objSeg); fzExpandir(r,cfg,dif,F,rest,ctx,used,objSeg); }
   fzHarmonizar(r);
   computeTransitions(sections,"fuerza",descanso);
   sections.forEach(S=>{ if(S.kind==="work") S.slots.forEach(s=>{ s.trans=(s.trans||"").replace(/^Descanso \d+ s( · )?/,""); s.restCue=false; }); });
   r.porBloque=Math.round(sections.filter(S=>S.kind==="work").reduce((a,S)=>a+S.slots.length,0)/nb*10)/10;
+  FZ_TEMA=null;
   return r;
 }
 const claseRitmoInv=()=>1/claseRitmoFactor();
@@ -276,7 +268,8 @@ function estAjustarDuracion(r,cfg){
   const ctx={size:"M",dif:r.nivel,base:r.base,eq:new Set(r.material||[])};
   const obj=Math.max(15*60,(cfg.duracion-5)*60/claseRitmoFactor()), tot=()=>r.sections.reduce((a,S)=>a+sectionSeconds(S,r),0), tol=110;
   const mas=[()=>estOpAbs(r,ctx),()=>estOpTrio(r,ctx),()=>estOpPierna(r,ctx),()=>estOpCierre(r,ctx),()=>estOpGlu(r,ctx),()=>estOpAbs(r,ctx)];
-  const menos=[()=>estOpCierreMenos(r),()=>estOpAbsMenos(r),()=>estOpPiernaMenos(r),()=>estOpTrioMenos(r),()=>estOpGluMenos(r),()=>estOpAbsMenos(r)];
+  const foco=((typeof temaDe==="function"&&temaDe(r))||{}).foco;   // el enfoque del tema no se recorta
+  const menos=[()=>estOpCierreMenos(r),()=>estOpAbsMenos(r),()=>foco==="leg"?false:estOpPiernaMenos(r),()=>foco==="up"?false:estOpTrioMenos(r),()=>foco==="glu"?false:estOpGluMenos(r),()=>estOpAbsMenos(r)];
   let g=0;
   while(g++<12){
     const t=tot(); if(Math.abs(t-obj)<=tol) break;

@@ -373,7 +373,7 @@ function makeState(){
   cfg:{
     metodo:"sculpt",
     estilo:"estacion", modo:"full", nivel:"media", duracion:45, base:8, porBloque:6,
-    fModo:"full", objetivo:"media", fPorBloque:"auto", fFormato:"biseries", fDuracion:55, descanso:60,
+    fModo:"full", objetivo:"media", fPorBloque:"auto", fFormato:"biseries", tema:"auto", fDuracion:55, descanso:60,
     bModo:"full", bDificultad:"media", bBase:8, bPorBloque:5, bDuracion:50,
     calent:true, enfr:true,
   },
@@ -423,6 +423,7 @@ function freshSort(pool){
 function bumpHistoria(r){
   const h=state.historia;
   h.sigs.unshift(routineSig(r)); h.sigs=h.sigs.slice(0,12);
+  if(typeof temaRegistrar==="function") temaRegistrar(r);
   for(const k in h.uso){ h.uso[k]*=0.5; if(h.uso[k]<0.28) delete h.uso[k]; }
   r.sections.forEach(s=>{ if(s.kind==="work") s.slots.forEach(x=>{ h.uso[x.ref]=(h.uso[x.ref]||0)+1; }); });
   LS.set("sf_historia",h);
@@ -673,12 +674,14 @@ function _generate(cfg){
 function generate(cfg){
   // genera varias clases y se queda con la de mejor calidad (duración, material, variedad, estructura)
   const N=(typeof claseCalidad==="function"&&cfg.metodo!=="barre")?10:1; let best=null, bs=-1;
+  const TM=(typeof temaElegir==="function"&&cfg.metodo!=="barre")?temaElegir(cfg.metodo,cfg):null; if(TM) cfg=Object.assign({},cfg,{_tema:TM.id});   // un tema por clase, distinto al de las últimas
   for(let i=0;i<N;i++){
     let r, t=0;
     do { r=_generate(cfg); t++; } while(t<4 && state.historia.sigs.includes(routineSig(r)));
-    const sc=N>1?claseCalidad(r).score+Math.random()*0.4:0;
+    const sc=N>1?claseCalidad(r).score+(typeof claseNovedad==="function"?claseNovedad(r)*18:0)+Math.random()*0.4:0;
     if(!best||sc>bs){ best=r; bs=sc; }
   }
+  if(best&&TM){ best.tema=TM.id; best.temaNom=TM.nom; best.temaDesc=TM.desc; }
   bumpHistoria(best);
   return best;
 }
@@ -724,7 +727,7 @@ function resolve(s){
     lado:s.lado!==undefined?s.lado:ex.lado,
     eq:s.eq||ex.eq, nota:s.nota||"", trans:s.trans||"",
     q:s.q||null, side:s.side||null,
-    ref:s.ref, sets:s.sets, rep:s.rep, rest:s.rest, rol:s.rol,
+    ref:s.ref, sets:s.sets, rep:s.rep, rest:s.rest, rol:s.rol, pir:s.pir,
   };
 }
 function schemeText(rs,routine,kind){
@@ -732,7 +735,7 @@ function schemeText(rs,routine,kind){
   if(kind==="prep"){ const q=(typeof prepQ==="function")?prepQ(rs.ref,"prep"):null; return q?{n:q,u:"",tempo:""}:{n:"8–10",u:"reps de activación",tempo:""}; }
   if(kind==="cool"){ const q=(typeof prepQ==="function")?prepQ(rs.ref,"cool"):null; return q?{n:q,u:"",tempo:""}:{n:"20–30",u:"s de sostén",tempo:""}; }
   if(routine.metodo==="fuerza" && (kind==="work")){
-    if(routine.v2){ const f=fSlot(rs,routine); return {n:`${f.sets} × ${f.rep}`,u:`reps · descanso ${f.rest} s`,tempo:rs.tempo?("tempo "+rs.tempo):"",strength:true,rol:f.rol}; }
+    if(routine.v2){ const f=fSlot(rs,routine); return {n:f.pir?f.rep:`${f.sets} × ${f.rep}`,u:`reps · descanso ${f.rest} s`,tempo:rs.tempo?("tempo "+rs.tempo):"",strength:true,rol:f.rol}; }
     return {n:`${routine.series} × ${routine.rango}`,u:"reps",tempo:rs.tempo?("tempo "+rs.tempo):"",strength:true};
   }
   if(kind==="cardioFin"){
@@ -960,6 +963,8 @@ function sculptParams(c){
       ${(c.estilo||"estacion")==="estacion"?`<p class="hint">🧠 Sigue tu formato: ${esc(aprResumen())}. <button class="link-btn" data-action="go" data-screen="formato">Ver o enseñar mi formato →</button></p><p class="hint"><b>Estaciones</b>: cada bloque es una posición trabajada en capas — entrada, hold, pulsos, liga, variante y hold a la falla. Glúteo con <b>Lado A</b> completo y luego <b>Lado B</b>, abdomen con 4 movimientos distintos, <b>Reto final</b> y <b>Cierre</b> con relajación. Material: mancuernas, silla o cubo, liga y polainas.</p>`
       :`<div class="seg">${[4,5,6].map(n=>`<button data-action="set-porbloque" data-v="${n}" class="${c.porBloque===n?'on':''}">3 bloques × ${n}</button>`).join("")}</div>
       <p class="hint">Formato anterior: <b>3 bloques de 6</b> ejercicios sueltos en mat.</p>`}
+      <label class="lbl" style="margin-top:4px"><span class="eyebrow" style="color:var(--muted)">Tema de la clase</span></label>
+      ${temaSegHtml(c)}
       <label class="lbl" style="margin-top:4px"><span class="eyebrow" style="color:var(--muted)">Sistema de repeticiones</span></label>
       <div class="seg">${[8,10,12].map(b=>`<button data-action="set-base" data-v="${b}" class="${c.base===b?'on':''}">Bloques de ${b}</button>`).join("")}</div>
       <p class="hint">Cada serie se cuenta en bloques de <b>${c.base}</b> — reps, pulsos o tempos en iso. Por defecto <b>8</b>.</p>
@@ -992,6 +997,8 @@ function fuerzaParams(c){
       <label class="lbl"><span class="eyebrow">Estructura</span></label>
       <div class="seg">${["auto",2,3,4,5].map(n=>`<button data-action="set-fporbloque" data-v="${n}" class="${String(c.fPorBloque)===String(n)?'on':''}">${n==="auto"?"Automático (según la duración)":"3 bloques × "+n}</button>`).join("")}</div>
       <p class="hint">Fuerza va por patrón: <b>Empuje · Tracción · Tren inferior</b> (o Rodilla · Bisagra · Accesorio). Cada bloque: ejercicio <b>principal pesado</b>, <b>secundario</b> y <b>accesorio</b>, con series, repeticiones y descanso propios; el número de ejercicios se ajusta a la duración que elijas.</p>
+      <label class="lbl" style="margin-top:4px"><span class="eyebrow" style="color:var(--muted)">Tema de la clase</span></label>
+      ${temaSegHtml(c)}
       <label class="lbl" style="margin-top:4px"><span class="eyebrow" style="color:var(--muted)">Formato de series</span></label>
       <div class="seg">${[["recto","Series rectas"],["biseries","Biseries (descanso activo)"]].map(([k,l])=>`<button data-action="set-fformato" data-v="${k}" class="${(c.fFormato||"recto")===k?'on':''}">${l}</button>`).join("")}</div>
       <p class="hint">${(c.fFormato||"recto")==="biseries"?"El principal va en series rectas; el secundario y los accesorios se hacen en <b>biseries</b>: alternas A y B sin descanso entre ellos y descansas al terminar los dos. Caben más ejercicios en el mismo tiempo.":"Cada ejercicio con todas sus series y su descanso antes de pasar al siguiente."}</p>
@@ -1078,6 +1085,7 @@ function viewPlanner(){
               ${r.estilo==="estacion"?`<span class="chip">${nWork} bloques</span><span class="chip">estaciones</span><span class="chip">base ${r.base}</span>`:`<span class="chip">${nWork} × ${r.porBloque}</span><span class="chip">${r.vueltas} vueltas</span><span class="chip">base ${r.base}</span>`}
             `}
             ${(r.material&&r.material.length)?`<span class="chip mat" title="Material necesario">🎒 ${esc(r.material.join(" · "))}</span>`:''}
+            ${r.temaNom&&r.tema!=="clasica"?`<span class="chip solid" title="${esc(r.temaDesc||"")}">🎯 ${esc(r.temaNom)}</span>`:''}
             <span class="chip">≈ ${est} min</span>
           </div>
         </div>
@@ -1365,7 +1373,10 @@ function modalTaste(){
    ============================================================ */
 function buildSteps(r){
   const steps=[]; let gi=0;
-  r.sections.forEach(S=>{ for(let i=0;i<S.slots.length;i++){ const s=S.slots[i], nx=S.slots[i+1], par=(s.par&&nx&&nx.par===s.par)?nx:null;   // una biserie es un solo paso con dos ejercicios
+  r.sections.forEach(S=>{
+    if(S.kind==="cardioFin"&&S.protocolo&&S.protocolo.rondas>1){   // el circuito da sus rondas completas
+      const R=S.protocolo.rondas; for(let k=0;k<R;k++) S.slots.forEach((s,si)=>steps.push({secNom:S.nom,tag:S.tag,kind:S.kind,protocolo:S.protocolo,slot:s,pair:null,carga:S.carga,gi:gi+si,si,ronda:k+1})); gi+=S.slots.length; return; }
+    for(let i=0;i<S.slots.length;i++){ const s=S.slots[i], nx=S.slots[i+1], par=(s.par&&nx&&nx.par===s.par)?nx:null;   // una biserie es un solo paso con dos ejercicios
     steps.push({secNom:S.nom,tag:S.tag,kind:S.kind,protocolo:S.protocolo,slot:s,pair:par,carga:S.carga,gi}); gi+=par?2:1; if(par) i++; } });
   return steps;
 }
@@ -1482,7 +1493,7 @@ function ivFuerza(){
       <div class="iv-pulse">
         <div class="iv-ring ${ringCls}" id="iv-ring">${ringTxt}</div>
         <small>${iv.phase==="rest"?"DESCANSO":iv.phase==="work"?"TRABAJO":"SEG"}</small>
-        <div class="iv-sets" id="iv-sets">${isWork?`Serie ${iv.serie}/${series}`:isCardio?`Ronda · circuito`:''}</div>
+        <div class="iv-sets" id="iv-sets">${isWork?`Serie ${iv.serie}/${series}`:isCardio?`Ronda ${st.ronda||1}/${st.protocolo.rondas}`:''}</div>
       </div>
       <div class="iv-sec"><span class="dot" style="background:${tagc}"></span><span>${esc(st.secNom)}</span></div>
       ${rs2?`<div class="iv-pair"><div class="iv-prow"><span class="iv-ab">A</span><div><div class="iv-pn">${esc(rs.nom)}</div><div class="iv-pq">${sc.n}<span>${sc.u}</span></div><div class="iv-pc">${esc(rs.cue)}</div></div></div><div class="iv-prow"><span class="iv-ab">B</span><div><div class="iv-pn">${esc(rs2.nom)}</div><div class="iv-pq">${sc2.n}<span>${sc2.u}</span></div><div class="iv-pc">${esc(rs2.cue)}</div></div></div></div>`:`<h2 class="iv-name">${esc(rs.nom)}</h2>`}
@@ -1650,6 +1661,7 @@ document.addEventListener("click",e=>{
   if(a==="set-porbloque"){ c.porBloque=Number(t.dataset.v); render(); return; }
   if(a==="set-objetivo"){ c.objetivo=t.dataset.v; c.descanso=OBJETIVOS[t.dataset.v].descanso; render(); return; }
   if(a==="set-fdur"){ c.fDuracion=Number(t.dataset.v); render(); return; }
+  if(a==="set-tema"){ c.tema=t.dataset.v; render(); return; }
   if(a==="set-fformato"){ c.fFormato=t.dataset.v; render(); return; }
   if(a==="set-fporbloque"){ c.fPorBloque=t.dataset.v==="auto"?"auto":Number(t.dataset.v); render(); return; }
   if(a==="set-descanso"){ c.descanso=Number(t.dataset.v); render(); return; }
@@ -1858,6 +1870,7 @@ function routineText(r,incluirPlaylist){
   const est=estimateMinutes(r);
   const nWork=r.sections.filter(s=>s.kind==="work").length;
   let out=`${r.nombre}\n`;
+  if(r.temaNom&&r.tema!=="clasica") out+=`Tema: ${r.temaNom} — ${r.temaDesc||""}\n`;
   out+= esF ? (r.v2?`${objetivoOf(r.objetivo).nom} · ${nWork} bloques · principal ${r.series} × ${r.rango} · ~${est} min`:`${objetivoOf(r.objetivo).nom} · ${r.series} series · descanso ${r.descanso}s · ~${est} min reales`)+`\n`
        : esB ? `${barreDifOf(r.bDificultad).nom} · ${nWork} bloques × ${r.porBloque} · pulsos y sostenes en cuentas de ${r.base} · ~${est} min reales\nClase fluida: encadena sin pausa, de pie → piso. La barra la hace el cubo o la pared. Termina estirando.\n`
        : r.estilo==="estacion" ? `${nivelOf(r.nivel).nom} · ${nWork} estaciones + reto final · base ${r.base} · ~${est} min\n${(r.material&&r.material.length)?"Material: "+r.material.join(", ")+"\n":""}`

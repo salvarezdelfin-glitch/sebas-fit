@@ -17,12 +17,14 @@ const EST_DIF={
 function estDif(k){ return EST_DIF[k]||EST_DIF.media; }
 function r5(n){ return n>=20?Math.round(n/5)*5:Math.round(n); }
 /* q (plantilla) → cantidad concreta */
-function estQ(q,base,difKey){
+function estQ(q,base,difKey,tema){
   const d=estDif(difKey), o={t:q.t};
   const apr=typeof aprAjustarCantidad==="function";   // lo que sueles usar (aprendido) se mezcla con lo generado
   if(q.t==="reps"){ o.n=q.n||Math.round(base*(q.f||1)); }
   else if(q.t==="pulsos"){ o.n=q.n||(apr?aprAjustarCantidad("pulsos",r5(Math.min(40,base*(q.f||3)*d.pul)),10):r5(Math.min(40,base*(q.f||3)*d.pul))); }
   else if(q.t==="hold"){ o.s=q.fijo?q.s:Math.max(10,apr?aprAjustarCantidad("hold",Math.round(q.s*d.hold/5)*5,10):Math.round(q.s*d.hold/5)*5); }
+  const m=tema&&tema.m;   // el tema de la clase cambia el ritmo: más pulsos, holds largos, tempo lento…
+  if(m&&!q.fijo){ if(o.t==="reps"&&m.reps!==1) o.n=Math.max(3,Math.round(o.n*m.reps)); else if(o.t==="pulsos"&&m.pul!==1&&!q.n) o.n=Math.max(10,r5(Math.min(45,o.n*m.pul))); else if(o.t==="hold"&&m.hold!==1) o.s=Math.max(10,Math.round(o.s*m.hold/5)*5); }
   if(q.por) o.por=q.por;
   if(q.nota) o.nota=q.nota;
   return o;
@@ -229,6 +231,12 @@ const EST_CIERRE=[
   P("c_mariposa","Mariposa o estiramiento de cadera","cierre","cierre","x","peso corporal",2,Qh(45),"Plantas juntas, rodillas caen sin forzar.",{}),
 ];
 
+EST_CIERRE.push(
+  P("c_478","Respiración 4-7-8","cierre","cierre","x","peso corporal",2,Qh(60),"Inhala 4, sostén 7, exhala 8. Suelta los hombros y la mandíbula.",{}),
+  P("c_giro","Torsión espinal tumbada","cierre","cierre","x","peso corporal",2,Qh(45),"Rodillas a un lado, brazos en cruz, mirada al lado contrario.",{}),
+  P("c_savasana","Savasana: todo el cuerpo suelto","cierre","cierre","x","peso corporal",2,Qh(60),"Brazos y piernas sueltos, siente cómo respira el cuerpo.",{})
+);
+
 /* ============================================================
    GENERADOR
    ============================================================ */
@@ -241,7 +249,7 @@ function estPick(arr,n,uso){
   return arr.slice().sort((a,b)=>sc(a)-sc(b)).slice(0,n);
 }
 function estSlot(step,ctx,side){
-  const q=estQ(step.q,ctx.base,ctx.dif);
+  const q=estQ(step.q,ctx.base,ctx.dif,ctx.tema);
   const s=slot(step); s.q=q; s.base=null; s.lado=false; s.side=side||null; s.eq=step.eq; s.trans=step.tr||"";
   return s;
 }
@@ -260,7 +268,7 @@ function estAnchorSteps(A,size,difKey){
   return L;   // unilaterales y glúteo: capas tal cual
 }
 function estBloque(kind,idx,ctx,used){
-  const size=ctx.size, dif=ctx.dif, sec={id:rid(),nom:"",tag:EST_TAG[kind],kind:"work",slots:[],bk:kind};
+  const size=(ctx.sizeBlk&&ctx.sizeBlk[kind])||ctx.size, dif=ctx.dif, sec={id:rid(),nom:"",tag:EST_TAG[kind],kind:"work",slots:[],bk:kind};
   const add=(step,side)=>sec.slots.push(estSlot(step,ctx,side));
   if(kind==="up"){
     const ent=estPick(LIB.filter(e=>e.anchor==="up_ent"),1)[0], pl=estPick(LIB.filter(e=>e.anchor==="up_pl"),1)[0], hold=estPick(LIB.filter(e=>e.anchor==="up_hold"),1)[0], reg=estPick(LIB.filter(e=>e.anchor==="up_reg"),1)[0];
@@ -308,22 +316,23 @@ const EST_MODOS={
 const EST_MODOS_S={full:["up","leg","abs"],upper:["up","plk","abs"],pierna:["leg","glu","abs"],core:["abs","plk","abs"]};
 function generateEstacion(cfg){
   const mode=MODES.sculpt[cfg.modo], size=cfg.duracion<=30?"S":cfg.duracion>=60?"L":"M", base=cfg.base||8, dif=cfg.nivel||"media";
-  const ctx={size,dif,base,eq:new Set()}, used=new Set(), sections=[];
+  const tema=temaPorId("sculpt",cfg._tema), ctx={size,dif,base,eq:new Set(),tema,sizeBlk:tema.foco==="glu"?{glu:"L"}:tema.foco==="up"?{up:"L"}:null}, used=new Set(), sections=[];
   if(cfg.calent) sections.push({id:rid(),nom:"Calentamiento",tag:"prep",kind:"prep",slots:shuffle(LIB.filter(e=>e.b==="prep"&&e.id!=="w_aprox")).slice(0,4).map(slot)});
   let kinds=(size==="S"?EST_MODOS_S[cfg.modo]:EST_MODOS[cfg.modo])||EST_MODOS.full;
   const aprK=(typeof aprEstructura==="function")?aprEstructura(cfg.modo):null;   // el orden de bloques que más usas
-  if(aprK) kinds=size==="S"?(aprK.filter(k=>k!=="glu").length>=3?aprK.filter(k=>k!=="glu"):aprK.slice(0,3)):aprK;
+  if(aprK&&(tema.id==="clasica"||Math.random()<0.65)) kinds=size==="S"?(aprK.filter(k=>k!=="glu").length>=3?aprK.filter(k=>k!=="glu"):aprK.slice(0,3)):aprK;
+  else if(cfg.modo==="full"&&tema.orden&&tema.orden.length){ const o=tema.orden[Math.floor(Math.random()*tema.orden.length)].filter(k=>kinds.includes(k)); if(o.length===kinds.length) kinds=o; }   // el tema también cambia el orden de los bloques
   kinds.forEach((k,i)=>sections.push(estBloque(k,i+1,ctx,used)));
   const reto=estPick(estPoolBlk("reto"),1)[0];
   sections.push({id:rid(),nom:"Reto final",tag:"core",kind:"finisher",slots:[estSlot(reto,ctx)],bk:"reto"});
   if(cfg.enfr){
-    const cs=EST_CIERRE.slice(0,2); if(size==="L") cs.push(EST_CIERRE[2]);
+    const cs=EST_CIERRE.slice(0,2), extra=shuffle(EST_CIERRE.slice(2)); if(size==="L"||Math.random()<0.6) cs.push(extra[0]); if(size==="L") cs.push(extra[1]);   // el cierre no es siempre el mismo
     sections.push({id:rid(),nom:"Cierre",tag:"prep",kind:"cool",slots:cs.map(s=>estSlot(s,ctx)),bk:"cierre"});
   }
-  const r={id:rid(),metodo:"sculpt",estilo:"estacion",nombre:`Sculpt · ${mode.nom} · ${cfg.duracion} min`,modo:cfg.modo,nivel:dif,duracion:cfg.duracion,base,porBloque:null,
+  const r={id:rid(),metodo:"sculpt",estilo:"estacion",nombre:`Sculpt · ${mode.nom} · ${cfg.duracion} min${tema.id!=="clasica"?" · "+tema.nom:""}`,tema:tema.id,temaNom:tema.nom,temaDesc:tema.desc,modo:cfg.modo,nivel:dif,duracion:cfg.duracion,base,porBloque:null,
     vueltas:1,rest:"una pasada por estación",sections,creada:Date.now(),material:[...ctx.eq]};
   estTransiciones(r);
-  if(typeof estAjustarDuracion==="function") estAjustarDuracion(r,cfg);   // llega a la duración pedida
+  if(typeof estAjustarDuracion==="function"){ temaPostSculpt(r); estAjustarDuracion(r,cfg); temaPostSculpt(r); }   // el tema da forma a las cantidades y la clase llega a la duración pedida
   return r;
 }
 /* transiciones: lo que cuenta la instructora al pasar de un paso a otro */
@@ -373,7 +382,8 @@ function estMood(S,r){
   const M={up:{lo:108,hi:120,en:"arranque con energía: plancha y mancuernas"},leg:{lo:98,hi:110,en:"marcado y sostenido para holds y pulsos"},
     glu:{lo:94,hi:106,en:"groove más lento y controlado para cuatro puntos"},abs:{lo:108,hi:120,en:"constante y empujando, abdomen"},
     plk:{lo:108,hi:120,en:"constante, aguanta las planchas"},reto:{lo:122,hi:132,en:"subidón para el reto final"},cierre:{lo:60,hi:78,en:"relajación: reflexión y respiración"}};
-  return M[S.bk]||null;
+  const m=M[S.bk]; if(!m) return null; const Tm=(typeof temaDe==="function")?temaDe(r):null, d=Tm&&S.bk!=="cierre"?(Tm.mood||0):0;
+  return d?{lo:m.lo+d,hi:m.hi+d,en:m.en}:m;
 }
 function modalEditPaso(S,s,rs){
   const q=s.q, e=byId[s.ref], t=q.t;
