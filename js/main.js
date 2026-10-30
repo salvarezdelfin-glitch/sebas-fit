@@ -116,6 +116,7 @@ function modalAsignar(){
 const Mods={
   click(a,t,e){
     if(a.startsWith("cl-")) return clClick(a,t);
+    if(a.startsWith("ci-")) return ciClick(a,t);
     if(a.startsWith("pt-")) return ptClick(a,t,e);
     if(a.startsWith("ct-")) return ctClick(a,t);
     if(a.startsWith("ar-")) return arClick(a,t);

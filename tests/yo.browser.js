@@ -1,6 +1,6 @@
 /* Prueba en navegador de la sección "Yo" (plan de maratón + pesas + comida). Usa boot.js. */
 window.yoTest=async function(){
-  await bootTest();
+  await bootTest(); YOUI.tab='hoy'; YOUI.off=0; YOUI.tipo=null;
   const F=[]; const ok=(c,m)=>{ if(!c) F.push(m); }; const info={};
   const $=s=>document.querySelector(s), setv=(id,v)=>{ const e=document.getElementById(id); if(!e) F.push('falta '+id); else e.value=v; };
   const click=a=>{ const e=$('[data-action="'+a+'"]'); if(!e){ F.push('no hay botón '+a); return false; } e.click(); return true; };

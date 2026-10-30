@@ -237,21 +237,21 @@ function estOpTrioMenos(r){
 /* pierna: capas extra (variantes A y B) antes del hold final a la falla */
 function estOpPierna(r,ctx){
   for(const S of estBloquesDe(r,["leg"])){
-    const An=EST_ANCHORS[S.anchor]; if(!An||An.lados) continue;
+    const An=EST_ANCHORS[S.anchor]; if(!An||An.lados||An.custom) continue;
     const tiene=new Set(S.slots.map(s=>byId[s.ref].layer)), falta=An.layers.map(i=>byId[i]).filter(e=>["varA","varB"].includes(e.layer)&&!tiene.has(e.layer)); if(!falta.length) continue;
     const i=S.slots.findIndex(s=>byId[s.ref].layer==="falla"); S.slots.splice(i<0?S.slots.length:i,0,estSlot(falta[0],ctx)); return true; }
   return false;
 }
 function estOpPiernaMenos(r){
   for(const S of estBloquesDe(r,["leg"])){
-    const An=EST_ANCHORS[S.anchor]; if(!An||An.lados) continue;
+    const An=EST_ANCHORS[S.anchor]; if(!An||An.lados||An.custom) continue;
     const i=S.slots.map(s=>byId[s.ref].layer).lastIndexOf("varB"), j=S.slots.map(s=>byId[s.ref].layer).lastIndexOf("varA"), k=i>=0?i:j; if(k<0) continue;
     S.slots.splice(k,1); return true; }
   return false;
 }
 function estOpCierre(r,ctx){
   const S=r.sections.find(x=>x.bk==="cierre"); if(!S) return false;
-  const sig=EST_CIERRE.find(e=>!S.slots.some(s=>s.ref===e.id)); if(!sig||S.slots.length>=4) return false; S.slots.push(estSlot(sig,ctx)); return true;
+  const sig=shuffle(EST_CIERRE.filter(e=>!S.slots.some(s=>s.ref===e.id)))[0]; if(!sig||S.slots.length>=4) return false; S.slots.push(estSlot(sig,ctx)); return true;
 }
 function estOpCierreMenos(r){ const S=r.sections.find(x=>x.bk==="cierre"); if(!S||S.slots.length<=2) return false; S.slots.pop(); return true; }
 function estOpGlu(r,ctx){
@@ -262,14 +262,15 @@ function estOpGlu(r,ctx){
 }
 function estOpGluMenos(r){
   const S=r.sections.find(x=>x.bk==="glu"); if(!S) return false; const anc=[...new Set(S.slots.map(s=>byId[s.ref].anchor))]; if(anc.length<2) return false;
-  const a=anc[anc.length-1]; S.slots=S.slots.filter(s=>byId[s.ref].anchor!==a); return true;
+  const a=anc[anc.length-1]; if(EST_ANCHORS[a]&&EST_ANCHORS[a].custom) return false;   // lo que tú enseñaste no se recorta
+  S.slots=S.slots.filter(s=>byId[s.ref].anchor!==a); return true;
 }
 function estAjustarDuracion(r,cfg){
   const ctx={size:"M",dif:r.nivel,base:r.base,eq:new Set(r.material||[])};
   const obj=Math.max(15*60,(cfg.duracion-5)*60/claseRitmoFactor()), tot=()=>r.sections.reduce((a,S)=>a+sectionSeconds(S,r),0), tol=110;
   const mas=[()=>estOpAbs(r,ctx),()=>estOpTrio(r,ctx),()=>estOpPierna(r,ctx),()=>estOpCierre(r,ctx),()=>estOpGlu(r,ctx),()=>estOpAbs(r,ctx)];
   const foco=((typeof temaDe==="function"&&temaDe(r))||{}).foco;   // el enfoque del tema no se recorta
-  const menos=[()=>estOpCierreMenos(r),()=>estOpAbsMenos(r),()=>foco==="leg"?false:estOpPiernaMenos(r),()=>foco==="up"?false:estOpTrioMenos(r),()=>foco==="glu"?false:estOpGluMenos(r),()=>estOpAbsMenos(r)];
+  const menos=[()=>estOpAbsMenos(r),()=>foco==="leg"?false:estOpPiernaMenos(r),()=>foco==="up"?false:estOpTrioMenos(r),()=>foco==="glu"?false:estOpGluMenos(r),()=>estOpCierreMenos(r),()=>estOpAbsMenos(r)];   // el cierre es lo último que se recorta: es parte de cómo se siente la clase
   let g=0;
   while(g++<12){
     const t=tot(); if(Math.abs(t-obj)<=tol) break;

@@ -1100,6 +1100,7 @@ function viewPlanner(){
       </div>
     </header>
 
+    ${typeof cicloBannerHtml==="function"?cicloBannerHtml(r):""}
     ${claseCalidadHtml(r)}
     ${musResumenHtml(r)}
 
@@ -1871,6 +1872,7 @@ function routineText(r,incluirPlaylist){
   const nWork=r.sections.filter(s=>s.kind==="work").length;
   let out=`${r.nombre}\n`;
   if(r.temaNom&&r.tema!=="clasica") out+=`Tema: ${r.temaNom} — ${r.temaDesc||""}\n`;
+  if(typeof cicloTextoRutina==="function") out+=cicloTextoRutina(r);
   out+= esF ? (r.v2?`${objetivoOf(r.objetivo).nom} · ${nWork} bloques · principal ${r.series} × ${r.rango} · ~${est} min`:`${objetivoOf(r.objetivo).nom} · ${r.series} series · descanso ${r.descanso}s · ~${est} min reales`)+`\n`
        : esB ? `${barreDifOf(r.bDificultad).nom} · ${nWork} bloques × ${r.porBloque} · pulsos y sostenes en cuentas de ${r.base} · ~${est} min reales\nClase fluida: encadena sin pausa, de pie → piso. La barra la hace el cubo o la pared. Termina estirando.\n`
        : r.estilo==="estacion" ? `${nivelOf(r.nivel).nom} · ${nWork} estaciones + reto final · base ${r.base} · ~${est} min\n${(r.material&&r.material.length)?"Material: "+r.material.join(", ")+"\n":""}`

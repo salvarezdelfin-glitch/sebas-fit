@@ -434,3 +434,25 @@ button,input,select,textarea,a{touch-action:manipulation}
 .iv-name1{font-size:clamp(24px,4.6vw,46px)!important}
 .iv-pair{display:flex;flex-direction:column;gap:12px;width:min(640px,100%);text-align:left} .iv-prow{display:flex;gap:12px;align-items:flex-start;padding:10px 14px;border:1px solid var(--hairline);border-radius:12px;background:var(--surface)} .iv-prow .iv-ab{font-size:15px!important;margin:3px 0 0;flex:none}
 .iv-pn{font-family:var(--f-display);font-weight:600;font-size:clamp(20px,4.4vw,34px);line-height:1.1} .iv-pq{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,4.6vw,38px);color:var(--accent);margin-top:2px} .iv-pq span{font-size:.45em;margin-left:6px;color:var(--ink-dim);font-weight:500} .iv-pc{font-size:13px;color:var(--muted);margin-top:2px}
+
+/* ---------- Clases 2: panel claro ---------- */
+.cl-pager{display:flex;align-items:center;gap:12px;margin-bottom:14px} .cl-pager b{flex:1;text-align:center;font-size:15px}
+.cl-dos{display:grid;grid-template-columns:minmax(260px,1fr) minmax(260px,1fr);gap:18px;align-items:start} .cl-graf .mini-lbl{margin-bottom:6px}
+.cl-tabla{width:100%} .cl-tabla th.n,.cl-tabla td.n{text-align:right;font-family:var(--f-mono)} .cl-tabla tr.g td{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding-top:12px;background:none}
+.cl-tabla tr.sub td{color:var(--muted);font-size:12.5px} .cl-tabla tr.tot td{font-weight:700;border-top:2px solid var(--hairline);font-size:15px}
+.cl-cerrado{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0;padding:12px 16px;border:1px solid var(--hairline-soft);border-radius:var(--radius);background:var(--surface)} .cl-cerrado>div{display:flex;flex-direction:column;gap:2px} .cl-cerrado.hay{border-color:rgba(227,171,82,.5)} .cl-cerrado b.num{font-size:22px}
+.cl-mas>summary{cursor:pointer;color:var(--accent);font-weight:600;padding:10px 0;font-size:14px} details.cl-mas.blk{border-top:1px solid var(--hairline-soft);margin-top:18px}
+.cl-mes{border:1px solid var(--hairline-soft);border-radius:var(--radius);margin-bottom:8px;background:var(--surface);overflow:hidden}
+.cl-mes-h{width:100%;display:grid;grid-template-columns:1.4fr .8fr 1.1fr 1.1fr 1fr;gap:8px;align-items:center;text-align:left;background:none;border:0;padding:13px 16px;color:var(--ink);font-size:13.5px}
+.cl-mes-n{font-weight:700;font-size:15px} .cl-mes-n small{font-weight:400;color:var(--accent);font-size:11px;margin-left:6px} .cl-mes-v{color:var(--muted)} .cl-mes-v b{color:var(--ink)} .cl-mes-v.dif.neg{color:var(--warn)} .cl-mes-v.dif.pos{color:var(--ok)}
+.cl-mes-det{padding:4px 16px 16px;border-top:1px solid var(--hairline-soft)} .chips-row{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px}
+@media (max-width:720px){ .cl-dos{grid-template-columns:1fr} .cl-mes-h{grid-template-columns:1fr 1fr} .cl-mes-n{grid-column:1/-1} }
+
+
+/* ---------- ciclos ---------- */
+.ci-banner{background:var(--accent-glow);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 16px;margin:0 0 14px}
+.ci-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .ci-top b{font-size:16px} .ci-top small{color:var(--muted);flex-basis:100%}
+.ci-sube{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px} .ci-sube>span:first-child:not(.chip){font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+.ci-reto{margin-top:8px;font-size:14px;font-weight:600} .ci-nuevas{margin-top:6px;font-size:12.5px;color:var(--ink-dim)}
+.ci-aviso{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.ci-row.hoy{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-glow)} .ci-ch{display:flex;flex-wrap:wrap;gap:4px}

@@ -27,6 +27,7 @@ function estQ(q,base,difKey,tema){
   if(m&&!q.fijo){ if(o.t==="reps"&&m.reps!==1) o.n=Math.max(3,Math.round(o.n*m.reps)); else if(o.t==="pulsos"&&m.pul!==1&&!q.n) o.n=Math.max(10,r5(Math.min(45,o.n*m.pul))); else if(o.t==="hold"&&m.hold!==1) o.s=Math.max(10,Math.round(o.s*m.hold/5)*5); }
   if(q.por) o.por=q.por;
   if(q.nota) o.nota=q.nota;
+  if(q.fijo) o.fijo=true;   // lo que tú enseñaste se respeta: ni la dificultad ni el tema lo cambian
   return o;
 }
 function estQTxt(q){
