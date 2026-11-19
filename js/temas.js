@@ -67,7 +67,7 @@ function temaPostSculpt(r){
     }
     if(T.post==="piramide") libres.filter(s=>s.q.t==="hold").forEach((s,i)=>{ s.q.s=Math.min(50,10+10*i); });
     if(T.nota){ const usados={}; libres.forEach(s=>{ const k=s.q.t==="pulsos"?"pulsos":s.q.t==="hold"?"hold":s.q.t==="reps"?"reps":null; if(!k||!T.nota[k]) return; usados[k]=(usados[k]||0)+1; if(usados[k]===1&&!s.nota) s.nota=T.nota[k]; }); }
-    if(T.post==="rafaga"&&S.bk==="leg"&&!S.slots.some(s=>/Ráfaga final/.test(s.nota||""))){
+    if(T.post==="rafaga"&&S.bk==="leg"&&!(EST_ANCHORS[S.anchor]&&EST_ANCHORS[S.anchor].custom)&&!S.slots.some(s=>/Ráfaga final/.test(s.nota||""))){
       const p=S.slots.slice().reverse().find(s=>s.q&&s.q.t==="pulsos"); if(p){ const x=Object.assign({},p,{uid:uid(),q:Object.assign({},p.q,{n:Math.max(15,Math.round(p.q.n*0.6)),fijo:false}),nota:"Ráfaga final: sin pausa"}); const i=S.slots.findIndex(s=>byId[s.ref].layer==="falla"); S.slots.splice(i<0?S.slots.length:i,0,x); }
     }
   });

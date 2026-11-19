@@ -6,7 +6,7 @@ const NAV_TODO=[["clases","Clases",["hoy"],"hoy"],["rutinas","Rutinas",["inicio"
   ["clientes","Clientes",["clientes","cliente","gym","plantilla","cotizador"],"clientes"],["finanzas","Finanzas",["finanzas"],"finanzas"],["yo","Yo",["yo"],"yo"],["ajustes","Ajustes",["ajustes"],"ajustes"]];
 const SOLO_FIN=window.APP_MODE==="finanzas";   // /finanzas/ = la misma app, abierta solo en Finanzas (se instala aparte como "Bolsillo")
 const NAV=SOLO_FIN?NAV_TODO.filter(n=>n[0]==="finanzas"||n[0]==="ajustes"):NAV_TODO;
-const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["formato","Mi formato"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
+const SUBNAV_RUT=[["inicio","Generar"],["armar","Armar"],["formato","🎤 Dictar"],["planner","Rutina"],["playlists","Playlists"],["guardadas","Biblioteca"]];
 
 /* ---------- utilidades de interfaz ---------- */
 function copyText(txt,msg){

@@ -44,7 +44,7 @@ function ciPasoSculpt(prev,k,total){
   const r=deepClone(prev); r.id=rid(); const ctx={size:"M",dif:r.nivel||"media",base:r.base||8,eq:new Set(r.material||[]),tema:temaPorId("sculpt",r.tema)}, base=r.base||8;
   r.sections.forEach(S=>{ if(S.kind!=="work") return; S.slots.forEach(s=>{ const q=s.q; if(!q||q.fijo) return;
     if(q.t==="hold") q.s=Math.min(60,q.s+5); else if(q.t==="pulsos") q.n=Math.min(50,q.n+5); else if(q.t==="reps"&&!q.por&&k%2===0) q.n=Math.min(base+3,q.n+1); }); });
-  if(k===2){ estOpPierna(r,ctx); estOpAbs(r,ctx); }
+  if(k===2){ const p=estOpPierna(r,ctx), q=estOpAbs(r,ctx); if(!p&&!q){ const S=r.sections.find(x=>x.bk==="abs")||r.sections.find(x=>x.bk==="plk"); if(S) estOpAbsEn(r,S,ctx); } }   // siempre llega una capa nueva en la semana 3
   if(k===total-1&&total>=3){ const L=r.sections.find(S=>S.bk==="leg"); if(L&&!L.slots.some(s=>/Ráfaga final/.test(s.nota||""))){ const p=L.slots.slice().reverse().find(s=>s.q&&s.q.t==="pulsos"&&!s.q.fijo); if(p){ const x=Object.assign({},p,{uid:uid(),q:Object.assign({},p.q,{n:Math.max(15,Math.round(p.q.n*0.6))}),nota:"Ráfaga final: sin pausa"}); const i=L.slots.findIndex(s=>byId[s.ref].layer==="falla"); L.slots.splice(i<0?L.slots.length:i,0,x); } } }
   estCargas(r); if(k>=2) r.sections.forEach(S=>{ if(S.carga&&/mancuernas/.test(S.carga)) S.carga+=" · prueba subir 1 kg"; });
   estTransiciones(r); return r;

@@ -89,6 +89,12 @@ P("up_s_patada","Patada de tríceps inclinado","up","up_s_brazos","s3","mancuern
 P("up_s_arnold","Press Arnold","up","up_s_mix","s1","mancuernas",0,Qr(1.25),"Gira las palmas al subir, controla la bajada.");
 P("up_s_mentón","Remo al mentón con mancuernas","up","up_s_mix","s2","mancuernas",0,Qr(1.25),"Codos arriba, mancuernas cerca del cuerpo.");
 P("up_s_pajaros","Pájaros inclinados","up","up_s_mix","s3","mancuernas",0,Qr(1.25),"Abre los brazos con codos suaves, junta escápulas.");
+P("up_s_iso_curl","Curl isométrico a 90° (aguantas)","up","up_s_iso","s1","mancuernas",0,Qh(20),"Codos pegados, antebrazos paralelos al piso; no bajes.");
+P("up_s_iso_lat","Laterales: subes y aguantas arriba","up","up_s_iso","s2","mancuernas",0,Qh(15),"Brazos a la altura del hombro, cuello largo.");
+P("up_s_iso_press","Press de hombro con pulsos arriba","up","up_s_iso","s3","mancuernas",0,Qp(2),"Brazos casi extendidos, pulsos cortos hacia el techo.");
+P("up_s_pul_remo","Remo inclinado con pulsos arriba","up","up_s_pulsos","s1","mancuernas",0,Qp(2),"Codos atrás y pulsas en la parte alta.");
+P("up_s_pul_paj","Pájaros con hold arriba","up","up_s_pulsos","s2","mancuernas",0,Qh(15),"Brazos abiertos, junta escápulas y aguanta.");
+P("up_s_pul_tri","Patada de tríceps con pulsos","up","up_s_pulsos","s3","mancuernas",0,Qp(2),"Brazo extendido atrás, pulsos cortos sin mover el codo.");
 
 /* ====== PIERNA ====== */
 /* L(ancla, nombre, material, posición, [entrada, hold, pulsos, liga, varA, varB, falla]) */
@@ -207,6 +213,17 @@ A("a_talones","Toques de talón alternos","inferior",Qr(2.5),"Core activo, rodil
 A("a_dead","Dead bug con mancuerna","estabilidad",Qr(1.25,{nota:"5 por lado"}),"Lumbar pegada, extiende brazo y pierna contrarios.");
 A("a_lateral","Plancha lateral con elevación de cadera","estabilidad",Qr(1.25,{por:"por lado"}),"Codo bajo el hombro, cadera sube y baja.","peso corporal",1);
 A("a_bird","Bird dog con mancuerna","estabilidad",Qr(1.25,{nota:"5 por lado"}),"Cadera cuadrada, extiende lento.","mancuernas",1);
+// más opciones por función, para que una clase de solo abdomen no tenga que repetir
+A("a_crunchpausa","Crunch con pausa de 2 segundos arriba","anterior",Qr(1.25),"Sube, aprieta 2 segundos y baja lento.","peso corporal");
+A("a_crunchpulso","Crunch con pulsos arriba","anterior",Qp(2.5),"Quédate arriba y pulsa corto, cuello largo.","peso corporal");
+A("a_rollup","Roll-up lento con mancuerna","anterior",Qr(1),"Enrolla vértebra por vértebra al subir y al bajar.");
+A("a_oblicuo","Crunch oblicuo cruzado","rotacion",Qr(1.25,{por:"por lado"}),"Hombro hacia la rodilla contraria, sin jalar el cuello.","peso corporal");
+A("a_lenador","Leñador sentada con mancuerna","rotacion",Qr(1.25,{por:"por lado"}),"De la cadera al hombro contrario, rota desde las costillas.");
+A("a_vup","Navaja (V-up) con mancuerna","inferior",Qr(1),"Brazos y piernas se encuentran arriba; baja controlado.");
+A("a_reversepulso","Crunch inverso con pulsos","inferior",Qp(2),"Rodillas al pecho y despega la cadera en pulsos cortos.","peso corporal");
+A("a_hollowpulso","Hollow con pulsos de piernas","inferior",Qp(2),"Lumbar pegada; las piernas pulsan pocos centímetros.","peso corporal");
+A("a_deadpausa","Dead bug con pausa abajo","estabilidad",Qr(1.25,{nota:"5 por lado"}),"Extiende, pausa un segundo sin despegar la lumbar.","peso corporal");
+A("a_puenteabs","Puente con mancuerna en la cadera y marcha","estabilidad",Qr(1.25,{nota:"5 por lado"}),"Cadera alta y quieta mientras alternas las piernas.");
 // planchas (modo core)
 const EST_PLK=[];
 function PL(id,nom,q,cue){ EST_PLK.push(P(id,nom,"plk","plk_"+id,"x","peso corporal",1,q,cue)); }
@@ -216,6 +233,9 @@ PL("p_hombro","Plancha con toques de hombro",Qn(16,{nota:"8 por lado"}),"Cadera 
 PL("p_rodilla","Plancha con rodilla al codo",Qn(12,{nota:"6 por lado"}),"Controla la cadera.");
 PL("p_lat","Plancha lateral hold",Qh(20,{por:"por lado"}),"Cuerpo en línea, cadera arriba.");
 PL("p_mount","Escaladores lentos",Qn(20),"Rodillas al pecho, cadera baja.");
+PL("p_bear","Hold de oso (rodillas a 2 cm del piso)",Qh(25),"Espalda plana, rodillas flotando, respira.");
+PL("p_caminata","Plancha con paso lateral",Qn(12,{nota:"6 por lado"}),"Mano y pie al mismo lado, cadera quieta.");
+PL("p_vaiven","Plancha en antebrazos con vaivén",Qn(12),"Mece el cuerpo adelante y atrás desde los hombros.");
 
 /* ====== RETO FINAL y CIERRE ====== */
 const EST_RETO=[];
@@ -268,16 +288,40 @@ function estAnchorSteps(A,size,difKey){
   }
   return L;   // unilaterales y glúteo: capas tal cual
 }
+/* nombre normalizado: "Hold de plancha alta" del bloque superior y del de planchas cuentan como el mismo ejercicio */
+function estNomKey(e){ return String(e.nom||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/^hold de |^hold /,"").replace(/[^a-z ]/g,"").trim(); }
+const EST_FN_ORD={anterior:0,rotacion:1,inferior:2,estabilidad:3};
+function estOrdenAbs(arr){ return arr.slice().sort((a,b)=>(a.f||0)-(b.f||0)||(EST_FN_ORD[a.fn]??9)-(EST_FN_ORD[b.fn]??9)); }
+function estPlkOrden(e){ const n=estNomKey(e); return /lateral/.test(n)?3:/antebrazo/.test(n)?2:/oso/.test(n)?1:0; }
+/* calentamiento según lo que se va a trabajar; termina en la posición donde empieza la clase */
+const EST_CALENT={
+  full:["w_cadera","bw_cat_flow","w_brazos","w_squat_air","w_march_core","bw_rolldown","w_leg_swings","w_banda_hombro"],
+  upper:["bw_cat_flow","w_tspine","w_flow","w_brazos","w_banda_hombro","bw_port_bras","bw_rolldown"],
+  pierna:["w_worlds_greatest","w_cadera","w_squat_air","w_leg_swings","bw_releve_prep","w_gluteo","bw_plie_suave"],
+  core:["w_brazos","bw_rolldown","w_march_core","bw_cat_flow","w_tspine","w_cadera"],
+};
+function estCalentamiento(modo,primero){
+  const ids=EST_CALENT[modo]||EST_CALENT.full, pool=shuffle(ids.map(i=>byId[i]).filter(Boolean)).slice(0,4);
+  const abajo=primero==="abs"||primero==="plk";   // si la clase empieza en el piso, el calentamiento termina en el piso
+  return pool.sort((a,b)=>abajo?(a.f||0)-(b.f||0):(b.f||0)-(a.f||0)).map(slot);
+}
 function estBloque(kind,idx,ctx,used){
   const size=(ctx.sizeBlk&&ctx.sizeBlk[kind])||ctx.size, dif=ctx.dif, sec={id:rid(),nom:"",tag:EST_TAG[kind],kind:"work",slots:[],bk:kind};
-  const add=(step,side)=>sec.slots.push(estSlot(step,ctx,side));
+  ctx.noms=ctx.noms||new Set();
+  const add=(step,side)=>{ sec.slots.push(estSlot(step,ctx,side)); if(side!=="B") ctx.noms.add(estNomKey(step)); };
+  const libre=e=>!ctx.noms.has(estNomKey(e));   // nada se repite dentro de la misma clase
   if(kind==="up"){
-    const ent=estPick(LIB.filter(e=>e.anchor==="up_ent"),1)[0], pl=estPick(LIB.filter(e=>e.anchor==="up_pl"),1)[0], hold=estPick(LIB.filter(e=>e.anchor==="up_hold"),1)[0], reg=estPick(LIB.filter(e=>e.anchor==="up_reg"),1)[0];
-    [ent,pl,hold,reg].forEach(s=>add(s));
-    const triosIds=[...new Set(LIB.filter(e=>e.anchor&&e.anchor.indexOf("up_s_")===0).map(e=>e.anchor))];
-    const trios=estPick(triosIds.map(a=>({id:a})),size==="L"?2:1).map(x=>x.id);
-    trios.forEach((a,k)=>{ const steps=LIB.filter(e=>e.anchor===a).sort((x,y)=>x.ord-y.ord); (size==="S"?steps.slice(0,2):steps).forEach(s=>add(s)); });
-    sec.nom="Bloque "+idx+" · Tren superior (mancuernas)"; ctx.eq.add("mancuernas");
+    const triosIds=[...new Set(LIB.filter(e=>e.anchor&&e.anchor.indexOf("up_s_")===0).map(e=>e.anchor))].filter(a=>!used.has(a));
+    if(!ctx.upHecho){
+      // primer bloque de tren superior: bajas a plancha, trabajas, hold, subes a pie y sigues de pie
+      const ent=estPick(LIB.filter(e=>e.anchor==="up_ent"),1)[0], pl=estPick(LIB.filter(e=>e.anchor==="up_pl"&&libre(e)),1)[0], hold=estPick(LIB.filter(e=>e.anchor==="up_hold"&&libre(e)),1)[0], reg=estPick(LIB.filter(e=>e.anchor==="up_reg"),1)[0];
+      [ent,pl,hold,reg].filter(Boolean).forEach(s=>add(s));
+    }
+    // de pie: tríos con sentido (hombro / espalda y brazo / brazos); un segundo bloque superior es solo de pie, sin volver a bajar a plancha
+    const nT=ctx.upHecho?(size==="S"?1:2):(ctx.sizeBlk&&ctx.sizeBlk.up==="L"?2:1);   /* plancha + un trío = 7 pasos, como tus clases */
+    const trios=estPick(triosIds.map(a=>({id:a})),nT).map(x=>x.id);
+    trios.forEach(a=>{ used.add(a); const steps=LIB.filter(e=>e.anchor===a).sort((x,y)=>x.ord-y.ord); (size==="S"&&!ctx.upHecho?steps.slice(0,2):steps).forEach(s=>add(s)); });
+    sec.nom="Bloque "+idx+" · Tren superior"+(ctx.upHecho?" de pie":"")+" (mancuernas)"; ctx.eq.add("mancuernas"); ctx.upHecho=true;
   } else if(kind==="leg"){
     const anchors=Object.values(EST_ANCHORS).filter(a=>a.blk==="leg"&&!used.has(a.id));
     const A=estPick(anchors.map(a=>({id:a.id})),1)[0], An=EST_ANCHORS[A.id]; used.add(An.id);
@@ -292,18 +336,18 @@ function estBloque(kind,idx,ctx,used){
     sec.anchor=An.id;
   } else if(kind==="glu"){
     const anchors=Object.values(EST_ANCHORS).filter(a=>a.blk==="glu"&&!used.has(a.id));
-    let A=estPick(anchors.map(a=>({id:a.id})),size==="L"?2:1);
+    let A=estPick(anchors.map(a=>({id:a.id})),1);   /* una estación de glúteo con lado A y lado B ya son 6 pasos */
     { const a0=EST_ANCHORS[A[0].id]; if(A.length<2&&!a0.lados&&a0.layers.length<5){ const otras=anchors.filter(x=>x.id!==a0.id); if(otras.length) A=A.concat(estPick(otras.map(x=>({id:x.id})),1)); } }   // un glúteo sin lados queda corto: se suma otra estación
     A.forEach(x=>{ const An=EST_ANCHORS[x.id]; used.add(An.id); const L=An.layers.map(i=>byId[i]);
       if(An.lados){ L.forEach(s=>add(s,"A")); L.forEach(s=>add(s,"B")); } else L.forEach(s=>add(s)); ctx.eq.add(An.eq); });
     const An0=EST_ANCHORS[A[0].id]; sec.nom="Bloque "+idx+" · Glúteo ("+An0.anchorNom.toLowerCase()+")"; sec.anchor=An0.id;
   } else if(kind==="abs"){
     const n=(typeof aprPasosBloque==="function")?aprPasosBloque("abs",size==="S"?3:size==="L"?6:4):(size==="S"?3:size==="L"?6:4), fns=["anterior","rotacion","inferior","estabilidad"], chosen=[];
-    for(let i=0;i<n;i++){ const fn=fns[i%fns.length]; const c=estPick(estPoolBlk("abs").filter(e=>e.fn===fn&&!chosen.includes(e)),1)[0]; if(c) chosen.push(c); }
-    // de más suave a más exigente: anterior, rotación, inferior, estabilidad
-    chosen.forEach(s=>add(s)); sec.nom="Bloque "+idx+" · Abs (mancuernas)"; sec.tag="core"; ctx.eq.add("mancuernas");
+    for(let i=0;i<n;i++){ const fn=fns[i%fns.length]; const c=estPick(estPoolBlk("abs").filter(e=>e.fn===fn&&!chosen.includes(e)&&libre(e)),1)[0]; if(c) chosen.push(c); }
+    // boca arriba primero (anterior → rotación → inferior), lo que va de lado o en cuatro puntos al final: sin subir y bajar
+    estOrdenAbs(chosen).forEach(s=>add(s)); sec.nom="Bloque "+idx+" · Abs"; sec.tag="core"; chosen.some(e=>e.eq==="mancuernas")&&ctx.eq.add("mancuernas");
   } else if(kind==="plk"){
-    estPick(estPoolBlk("plk"),size==="S"?3:size==="L"?6:4).forEach(s=>add(s)); sec.nom="Bloque "+idx+" · Planchas"; ctx.eq.add("peso corporal");
+    estPick(estPoolBlk("plk").filter(libre),size==="S"?3:size==="L"?6:4).sort((a,b)=>estPlkOrden(a)-estPlkOrden(b)).forEach(s=>add(s)); sec.nom="Bloque "+idx+" · Planchas"; ctx.eq.add("peso corporal");
   }
   return sec;
 }
@@ -312,19 +356,20 @@ const EST_MODOS={
   upper:["up","up","plk","abs"],
   pierna:["leg","leg","glu","abs"],
   core:["abs","plk","abs"],
+  coreL:["abs","plk","abs","plk"],
 };
 /* clase corta (30 min): una estación menos para que quepa */
 const EST_MODOS_S={full:["up","leg","abs"],upper:["up","plk","abs"],pierna:["leg","glu","abs"],core:["abs","plk","abs"]};
 function generateEstacion(cfg){
   const mode=MODES.sculpt[cfg.modo], size=cfg.duracion<=30?"S":cfg.duracion>=60?"L":"M", base=cfg.base||8, dif=cfg.nivel||"media";
   const tema=temaPorId("sculpt",cfg._tema), ctx={size,dif,base,eq:new Set(),tema,sizeBlk:tema.foco==="glu"?{glu:"L"}:tema.foco==="up"?{up:"L"}:null}, used=new Set(), sections=[];
-  if(cfg.calent) sections.push({id:rid(),nom:"Calentamiento",tag:"prep",kind:"prep",slots:shuffle(LIB.filter(e=>e.b==="prep"&&e.id!=="w_aprox")).slice(0,4).map(slot)});
-  let kinds=(size==="S"?EST_MODOS_S[cfg.modo]:EST_MODOS[cfg.modo])||EST_MODOS.full;
+  let kinds=(size==="S"?EST_MODOS_S[cfg.modo]:size==="L"&&cfg.modo==="core"?EST_MODOS.coreL:EST_MODOS[cfg.modo])||EST_MODOS.full;
   const aprK=(typeof aprEstructura==="function")?aprEstructura(cfg.modo):null;   // el orden de bloques que más usas
   if(aprK&&(tema.id==="clasica"||Math.random()<0.65)) kinds=size==="S"?(aprK.filter(k=>k!=="glu").length>=3?aprK.filter(k=>k!=="glu"):aprK.slice(0,3)):aprK;
   else if(cfg.modo==="full"&&tema.orden&&tema.orden.length){ const o=tema.orden[Math.floor(Math.random()*tema.orden.length)].filter(k=>kinds.includes(k)); if(o.length===kinds.length) kinds=o; }   // el tema también cambia el orden de los bloques
+  if(cfg.calent) sections.push({id:rid(),nom:"Calentamiento",tag:"prep",kind:"prep",slots:estCalentamiento(cfg.modo,kinds[0])});
   kinds.forEach((k,i)=>sections.push(estBloque(k,i+1,ctx,used)));
-  const reto=estPick(estPoolBlk("reto"),1)[0];
+  const reto=estPick(estPoolBlk("reto").filter(e=>!ctx.noms.has(estNomKey(e))),1)[0]||estPick(estPoolBlk("reto"),1)[0];
   sections.push({id:rid(),nom:"Reto final",tag:"core",kind:"finisher",slots:[estSlot(reto,ctx)],bk:"reto"});
   if(cfg.enfr){
     const cs=EST_CIERRE.slice(0,2), extra=shuffle(EST_CIERRE.slice(2)); if(size==="L"||Math.random()<0.6) cs.push(extra[0]); if(size==="L") cs.push(extra[1]);   // el cierre no es siempre el mismo
