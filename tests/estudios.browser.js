@@ -54,7 +54,7 @@ window.rsTest=async function(){
   RESP().posponer=null; let bajadas=0; const orig=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){ if(this.download&&/respaldo/.test(this.download)) bajadas++; else orig.call(this); };
   render(); $('[data-action="aj-backup"]').click(); await new Promise(r=>setTimeout(r,700));
   HTMLAnchorElement.prototype.click=orig; ok(bajadas===1,'el botón descarga un archivo de respaldo ('+bajadas+')'); ok(RESP().ultimo&&respDias()===0,'marca la fecha del último respaldo'); ok(!respToca(),'ya no avisa');
-  RESP().ultimo=new Date(Date.now()-8*864e5).toISOString(); ok(respToca(),'a los 8 días vuelve a avisar'); RESP().ultimo=new Date(Date.now()-3*864e5).toISOString(); ok(!respToca(),'a los 3 días no avisa');
+  RESP().ultimo=new Date(Date.now()-31*864e5).toISOString(); ok(respToca(),'al mes vuelve a avisar'); RESP().ultimo=new Date(Date.now()-8*864e5).toISOString(); ok(!respToca(),'a los 8 días todavía no (la nube ya guarda)'); RESP().ultimo=new Date(Date.now()-3*864e5).toISOString(); ok(!respToca(),'a los 3 días no avisa');
   RESP().cada=14; RESP().ultimo=new Date(Date.now()-10*864e5).toISOString(); ok(!respToca(),'con recordatorio de 2 semanas, 10 días no avisa'); RESP().cada=0; RESP().ultimo=null; ok(!respToca(),'"No recordar" lo apaga');
   state.screen='ajustes'; render(); $('[data-action="aj-resp-cada"][data-v="7"]').click(); ok(RESP().cada===7,'elige recordar cada semana'); ok(/Aún no has descargado/.test($('#app').textContent)&&!/undefined|NaN/.test($('#app').textContent),'Ajustes muestra el estado del respaldo');
   // el archivo se puede cargar de vuelta

@@ -5,7 +5,7 @@
    Historial por mes (solo abre el mes que quieres, sin listas interminables) → Más (horario, rutinas, forma de pago)
    ============================================================ */
 CL.res={tab:"semana",back:0}; CL.open={}; CL.mesesMas=false;
-const CL_TABS=[["semana","Semana"],["quincena","Quincena"],["mes","Mes"]];
+const CL_TABS=[["semana","Semana"],["quincena","Quincena"],["mes","Mes"],["anio","Año"]];
 const clMesNom=m=>{ const [y,mo]=m.split("-"); const n=MESES_LARGO[(+mo||1)-1]; return n.charAt(0).toUpperCase()+n.slice(1)+" "+y; };
 
 /* ---------- períodos y totales ---------- */
@@ -13,6 +13,7 @@ function clPeriodo(tab,back){
   const hoy=todayStr();
   if(tab==="semana"){ const wk=weekKeyAndLabel(addDays(hoy,-7*back)); return {ini:wk.key,fin:wk.endKey,label:wk.label,corto:fmtCorto(wk.key)}; }
   if(tab==="quincena"){ const q=quincenaFor(hoy,back); return {ini:q.startStr,fin:q.endStr,label:"Quincena "+q.label,corto:fmtCorto(q.startStr)}; }
+  if(tab==="anio"){ const y=new Date().getFullYear()-back; return {ini:y+"-01-01",fin:y+"-12-31",label:"Año "+y,corto:String(y)}; }
   const d=new Date(), m=new Date(d.getFullYear(),d.getMonth()-back,1), f=new Date(m.getFullYear(),m.getMonth()+1,0);
   return {ini:toDateStr(m),fin:toDateStr(f),label:clMesNom(toDateStr(m).slice(0,7)),corto:MESES[m.getMonth()]};
 }
@@ -32,11 +33,12 @@ function clResumenHtml(){
     filas+=`<tr class="g"><td colspan="3">${nom}</td></tr>`+l.map(s=>`<tr><td>${stChip(s)}</td><td class="n">${S.por[s].n}</td><td class="n">${money(S.por[s].total)}</td></tr>`).join("");
     if(l.length>1) filas+=`<tr class="sub"><td>Subtotal</td><td class="n">${l.reduce((a,s)=>a+S.por[s].n,0)}</td><td class="n">${money(l.reduce((a,s)=>a+S.por[s].total,0))}</td></tr>`; });
   const tabla=sts.length?`<table class="yo-tabla cl-tabla"><thead><tr><th>Estudio</th><th class="n">Clases</th><th class="n">Ganado</th></tr></thead><tbody>${filas}<tr class="tot"><td>Total</td><td class="n">${S.n}</td><td class="n">${money(S.total)}</td></tr></tbody></table>`:`<p class="hint">Sin clases confirmadas en este período.</p>`;
-  const mp=P.ini.slice(0,7), recibido=R.tab==="mes"?cbRecibidoEnMes(mp):null;
-  const tiles=`<div class="tiles tiles-4">${tile("Clases dadas",S.n,S.pend?S.pend+" por confirmar":"")}${tile("Ganado",money(S.total),"según tus tarifas",1)}${R.tab==="mes"?tile("Recibido",money(recibido),"lo que ya te depositaron",1)+tile("Promedio por clase",S.n?money(S.total/S.n):"—",""):tile("Promedio por clase",S.n?money(S.total/S.n):"—","")+tile("Clases por día",(S.n/Math.max(1,R.tab==="semana"?7:R.tab==="quincena"?15:30)).toFixed(1).replace(".0",""),"")}</div>`;
-  // tendencia: los últimos 8 períodos
-  const vals=[], labs=[]; for(let b=7;b>=0;b--){ const p=clPeriodo(R.tab,R.back+b); vals.push(Math.round(clStats(p.ini,p.fin).total)); labs.push(b%2===0?p.corto:""); }
-  const grafica=typeof svgBars==="function"&&vals.some(v=>v>0)?`<div class="cl-graf"><div class="mini-lbl">Ganado en los últimos 8 períodos</div>${svgBars(vals,labs,v=>v>=1000?(Math.round(v/100)/10)+"k":v)}</div>`:"";
+  // recibido = lo que marcaste como cobrado en los meses de este período (solo tiene sentido en mes y año)
+  const recibido=R.tab==="mes"?cbRecibidoEnMes(P.ini.slice(0,7)):R.tab==="anio"?Array.from({length:12},(_,i)=>cbRecibidoEnMes(P.ini.slice(0,4)+"-"+String(i+1).padStart(2,"0"))).reduce((a,b)=>a+b,0):null;
+  const tiles=`<div class="tiles tiles-4">${tile("Clases dadas",S.n,S.pend?S.pend+" por confirmar":"")}${tile("Ganado",money(S.total),"según tus tarifas",1)}${tile("Promedio por clase",S.n?money(S.total/S.n):"—","")}${recibido!=null?tile("Ya te pagaron",money(recibido),"lo que marcaste como cobrado",1):""}</div>`;
+  // tendencia: últimos 8 períodos (3 años en la vista Año)
+  const nP=R.tab==="anio"?3:8, vals=[], labs=[]; for(let b=nP-1;b>=0;b--){ const p=clPeriodo(R.tab,R.back+b); vals.push(Math.round(clStats(p.ini,p.fin).total)); labs.push(nP<=3||b%2===0?p.corto:""); }
+  const grafica=typeof svgBars==="function"&&vals.some(v=>v>0)?`<div class="cl-graf"><div class="mini-lbl">Ganado en ${R.tab==="anio"?"los últimos 3 años":"los últimos 8 períodos"}</div>${svgBars(vals,labs,v=>v>=1000?(Math.round(v/100)/10)+"k":v)}</div>`:"";
   return `<div class="cl-pager"><button class="pg" data-action="cl-res-prev" aria-label="Período anterior">←</button><b>${esc(P.label)}</b><button class="pg" data-action="cl-res-next" ${R.back<=0?"disabled":""} aria-label="Período siguiente">→</button>${R.back>0?`<button class="btn sm ghost" data-action="cl-res-hoy">Hoy</button>`:""}</div>
     ${tiles}<div class="cl-dos">${tabla}${grafica}</div>`;
 }

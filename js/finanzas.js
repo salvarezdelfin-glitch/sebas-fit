@@ -48,7 +48,7 @@ const fiPl=(n,a,b)=>n===1?a:b;
 const fiDays=(a,b)=>Math.round((parseLocalDate(b)-parseLocalDate(a))/86400000);
 const fiMx0=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0});
 const fiMx2=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",minimumFractionDigits:2,maximumFractionDigits:2});
-function fiFmt(n){ n=Number(n)||0; if(Math.abs(n)<.005) n=0; return Math.abs(n-Math.round(n))<.005?fiMx0.format(Math.round(n)):fiMx2.format(n); }
+function fiFmt(n){ n=Number(n)||0; if(Math.abs(n)<.5) n=0; return fiMx0.format(Math.round(n)); }   // siempre en pesos completos: más fácil de leer
 const fiK=n=>n>=1000?"$"+(n/1000).toFixed(n>=10000?0:1).replace(/\.0$/,"")+"k":"$"+Math.round(n);
 function fiShiftMonth(k,n){ const [y,m]=k.split("-").map(Number), d=new Date(y,m-1+n,1); return d.getFullYear()+"-"+pad(d.getMonth()+1); }
 function fiMonthLabel(k){ const [y,m]=k.split("-").map(Number); const t=new Intl.DateTimeFormat("es-MX",{month:"long",year:"numeric"}).format(new Date(y,m-1,1)); return t.charAt(0).toUpperCase()+t.slice(1); }
@@ -450,7 +450,7 @@ function viewFinanzas(){
   if(!FI.month) FI.month=todayStr().slice(0,7);
   const body=FI.tab==="deudas"?fiViewDeudas():FI.tab==="gastos"?fiViewGastos():FI.tab==="crecer"?fiViewCrecer():fiViewHoy();
   return `<div class="wrap fi"><header class="page-head"><span class="eyebrow">Plan de pago · deudas · ahorro</span><h1>Finanzas</h1>
-    <p class="sub">Se arma solo con tus clases dadas y lo que cobras en Clases. Orientación general con tus números, no es asesoría financiera profesional.</p></header>
+    <p class="sub">Se arma solo con lo que ganas en tus clases. Orientación general, no asesoría profesional.</p></header>
     <div class="subnav" style="padding:0"><div class="tabs">${FI_TABS.map(([k,l])=>`<button data-action="fi-tab" data-tab="${k}" class="${FI.tab===k?"on":""}">${l}</button>`).join("")}</div></div>
     ${body}</div>`;
 }
@@ -460,9 +460,15 @@ function fiViewHoy(){
   const m=fiModel(); let alert="";
   if(!m.hasData) alert=`<div class="fi-notice warn"><span><b>Aún no hay ingresos.</b> Marca las clases que das (o los cobros) en Clases y aquí se calcula tu plan.</span><button class="btn sm" data-action="go" data-screen="hoy">Ir a Clases</button></div>`;
   else if(m.stale) alert=`<div class="fi-notice warn"><span><b>Tu último ingreso es del ${fmtCorto(m.last)}</b> (hace ${m.daysSince} días). El plan usa datos viejos: marca tus clases en Clases.</span><button class="btn sm" data-action="go" data-screen="hoy">Ir a Clases</button></div>`;
-  return `${alert}${fiSaldoOk()?"":fiSaldoPrompt()}${fiHero()}${fiPasosCard()}${fiResumenCard()}${fiGastosCard()}${fiCobrosBlk()}
-    <div class="fi-grid2 blk">${fiDiagCard()}${fiPlanCard()}</div>
-    <section class="blk"><div class="card">${fiCompraCard()}</div></section>`;
+  // lo esencial arriba (cuánto puedo gastar y qué me toca hacer); el análisis completo queda guardado en "Ver más detalle"
+  return `${alert}${fiSaldoOk()?"":fiSaldoPrompt()}${fiHero()}${fiPasosCard()}${fiClasesLinea()}
+    <section class="blk"><div class="card">${fiCompraCard()}</div></section>${fiGastosCard()}
+    <details class="fi-detalle blk" data-det="hoy-detalle" ${FI.open.has("hoy-detalle")?"open":""}><summary>Ver más detalle: diagnóstico, plan de pago y cobros por periodo</summary>${fiResumenCard()}<div class="fi-grid2 blk">${fiDiagCard()}${fiPlanCard()}</div>${fiCobrosBlk()}</details>`;
+}
+/* una sola línea con lo de Clases (el detalle vive en Clases, no se repite aquí) */
+function fiClasesLinea(){
+  const hoy=todayStr(), mp=hoy.slice(0,7), c=fiClasesEn(mp+"-01",hoy), r=fiRecibidoEn(mp+"-01",hoy), pend=fiSum(cbPendientes(),x=>x.est);
+  return `<section class="blk"><div class="card fi-clases-linea"><span><b>Este mes:</b> ${c.n} ${fiPl(c.n,"clase","clases")} · ganado <b class="num">${fiFmt(c.monto)}</b> · ya te pagaron <b class="num">${fiFmt(r.total)}</b>${pend>=1?` · <span style="color:var(--warn)">por cobrar ${fiFmt(pend)}</span>`:""}</span><button class="btn sm" data-action="go" data-screen="hoy">Ver en Clases</button></div></section>`;
 }
 function fiHero(){
   const h=fiHeroModel(), p=h.p; let amt,cls="",sub,pc=0,color="var(--ok)";
@@ -659,7 +665,7 @@ const fiSaldoOk=()=>fiCfg().accounts.some(a=>a.id!=="credito"&&a.saldoDesde);
 function fiSaldoPrompt(){
   const ac=fiCfg().accounts.filter(a=>a.id!=="credito");
   return `<section class="blk"><div class="card"><div class="fi-card-head"><h3>Primero: cuánto tienes hoy</h3><span class="hint">el dato que más necesito</span></div>
-    <p class="hint" style="margin-top:0">Escribe lo que tienes ahora en cada cuenta (efectivo y tarjeta de débito, sin contar tarjetas de crédito). Sin esto no puedo decirte cuánto puedes gastar ni si te alcanza para una compra; con esto, desde hoy sumo lo que cobras y resto lo que gastas.</p>
+    <p class="hint" style="margin-top:0">Escribe cuánto tienes hoy en efectivo y en tu tarjeta de débito (no cuentes las de crédito). A partir de ahí sumo lo que cobras y resto lo que gastas.</p>
     <div class="form-grid g3">${ac.map(a=>`<div><label class="mini">${esc(a.name)}</label><input class="inp" type="number" inputmode="decimal" step="50" placeholder="$0" id="fsi-${esc(a.id)}"></div>`).join("")}
       <div><label class="mini">&nbsp;</label><button class="btn primary" style="width:100%" data-action="fi-saldo-inicial">Guardar</button></div></div></div></section>`;
 }
@@ -1288,3 +1294,6 @@ document.addEventListener("click",e=>{
   const t=e.target.closest&&e.target.closest('[data-action="go"]'); if(!t||t.dataset.screen==="finanzas"||t.dataset.screen==="ajustes") return;
   e.preventDefault(); e.stopPropagation(); location.href="/sebas-fit/";
 },true);
+
+/* lo que abres con "Ver más detalle" (u otro desplegable) se queda abierto aunque la pantalla se redibuje */
+document.addEventListener("toggle",ev=>{ const d=ev.target; if(d&&d.matches&&d.matches("details[data-det]")&&typeof FI!=="undefined"&&FI.open){ if(d.open) FI.open.add(d.dataset.det); else FI.open.delete(d.dataset.det); } },true);

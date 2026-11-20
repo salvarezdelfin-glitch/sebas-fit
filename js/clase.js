@@ -320,7 +320,9 @@ function estOpBloqueExtra(r,ctx){
     const usados=estUsadosAnclas(r), c2=Object.assign({},ctx,{size:"M",upHecho:true,noms:new Set(r.sections.flatMap(S=>S.slots.map(s=>estNomKey(byId[s.ref]))))});
     const B=estBloque(kind,0,c2,usados); if(B.slots.length<4) continue;   // una estación de 3 pasos no vale la pena
     const work=r.sections.filter(S=>S.kind==="work"), absI=r.sections.findIndex(S=>S.bk==="abs"||S.bk==="plk"), at=absI>0&&kind!=="plk"&&kind!=="abs"?absI:r.sections.indexOf(work[work.length-1])+1;
-    r.sections.splice(at,0,B); if(tot()>lim){ r.sections.splice(at,1); continue; }   // si no cabe, no entra
+    r.sections.splice(at,0,B);
+    while(tot()>lim&&B.slots.length>4&&["up","plk","abs"].includes(kind)) B.slots.pop();   // una estación de pierna o glúteo no se corta a la mitad   // se recorta lo justo para que quepa
+    if(tot()>lim){ r.sections.splice(at,1); continue; }   // si aun así no cabe, no entra
     r._extra=true;
     r.sections.filter(S=>S.kind==="work").forEach((S,i)=>{ S.nom=S.nom.replace(/^Bloque d+/,"Bloque "+(i+1)); });
     c2.eq.forEach(x=>ctx.eq.add(x)); return true;

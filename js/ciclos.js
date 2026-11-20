@@ -124,7 +124,7 @@ function cicloTextoRutina(r){
 }
 function cicloHoyBlk(){
   const S=ciSemanaActual();
-  if(!S) return `<section class="blk"><div class="card ci-aviso"><div><b>Que tus clases avancen semana a semana</b><p class="hint" style="margin:4px 0 0">Crea un ciclo: cada semana es la misma clase un paso más arriba, así las que ya vienen sienten su avance y las nuevas se suben sin perderse.</p></div><button class="btn primary" data-action="ci-ir">Crear ciclo</button></div></section>`;
+  if(!S) return "";   // sin ciclo activo no se ocupa espacio en el panel de Clases (los ciclos se crean en Rutinas)
   if(S.termino) return `<section class="blk"><div class="card ci-aviso"><div><b>Terminó el ciclo «${esc(S.p.nombre)}»</b><p class="hint" style="margin:4px 0 0">Crea uno nuevo con otros ejercicios y otra forma de empezar.</p></div><button class="btn primary" data-action="ci-ir">Nuevo ciclo</button></div></section>`;
   const w=S.w;
   return `<section class="blk"><div class="blk-head"><div><h2>Esta semana · ${esc(w.etq)}</h2><p>Semana ${S.n} de ${S.p.semanas.length} · ${esc(S.p.nombre)}</p></div><button class="btn" data-action="ci-asignar" data-id="${S.p.id}" data-n="${S.n}">🗓 Poner en mis clases de la semana</button></div>

@@ -470,3 +470,14 @@ button,input,select,textarea,a{touch-action:manipulation}
 .es-chip.on{background:var(--accent);color:#fff;border-color:var(--accent)} .es-para-vacio{margin:0 0 14px}
 .rs-btns{display:flex;gap:8px;flex-wrap:wrap}
 .fq-tags{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px} .fq-nota{margin:8px 0 14px}
+
+/* 2026-11-19 · Clases y Finanzas más simples */
+.cl-cambio{flex-basis:100%;margin:0 0 4px}
+.cl-cambio>summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600;padding:2px 0}
+.cl-cambio[open]{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cl-cambio[open]>summary{flex-basis:100%}
+.cl-extra-mas{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.cl-extra-mas>summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600;padding:2px 0;flex-basis:100%}
+.fi-detalle>summary{cursor:pointer;color:var(--accent);font-weight:600;padding:12px 0;font-size:14px}
+.fi-detalle{border-top:1px solid var(--hairline-soft);margin-top:18px}
+.fi-clases-linea{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}

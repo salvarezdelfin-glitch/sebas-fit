@@ -226,7 +226,8 @@ function clPayoutsHtml(){
 }
 
 /* ---------- editor del día ---------- */
-function clFixedMatch(dayEntries,slot,used){ return dayEntries.find(e=>!used[e.id]&&e.studio===slot.studio&&e.time===slot.time&&e.tipo==="propia"); }
+/* una clase fija marcada recuerda su horario (slot): si ese día cambias la hora o el estudio, sigue siendo la misma clase */
+function clFixedMatch(dayEntries,slot,used){ return dayEntries.find(e=>!used[e.id]&&e.slot===slot.id)||dayEntries.find(e=>!used[e.id]&&!e.slot&&e.studio===slot.studio&&e.time===slot.time&&e.tipo==="propia"); }
 function clDayBlk(){ return `<section class="blk"><div class="blk-head"><h2>Editor del día</h2><p>Marca lo que diste — se guarda al instante</p></div><div class="card" id="cl-day">${clDayHtml()}</div></section>`; }
 function clDayHtml(){
   const C=CL_D(), wd=diaDeFecha(CL.day);
@@ -238,21 +239,25 @@ function clDayHtml(){
   const fx=fixed.map(s=>{
     const m=clFixedMatch(dayE,s,used); if(m) used[m.id]=1;
     const amt=m?m.amount:rateFor({studio:s.studio,attendance:"grupo"},C.rates);
+    const cambio=m&&(m.time!==s.time||m.studio!==s.studio);
     const det=m?`<div class="check-details">
-        ${s.studio==="ALUNNA"?`<select class="inp w-sel" data-action="cl-f" data-id="${m.id}" data-f="attendance"><option value="grupo" ${m.attendance!=="solo"?"selected":""}>Grupo</option><option value="solo" ${m.attendance==="solo"?"selected":""}>1 persona</option></select>`:""}
+        <details class="cl-cambio" ${cambio?"open":""}><summary>✏️ ${cambio?"Cambió este día":"¿Cambió la hora o el estudio?"}</summary>
+          <input class="inp w-time" type="time" data-action="cl-f" data-id="${m.id}" data-f="time" value="${m.time||""}" aria-label="Hora de este día">
+          <input class="inp w-studio" list="dl-studios" data-action="cl-f" data-id="${m.id}" data-f="studio" value="${esc(m.studio||"")}" aria-label="Estudio de este día">
+          <span class="hint">solo este día; tu horario fijo no cambia</span></details>
+        ${(m.studio||s.studio)==="ALUNNA"?`<select class="inp w-sel" data-action="cl-f" data-id="${m.id}" data-f="attendance"><option value="grupo" ${m.attendance!=="solo"?"selected":""}>Grupo</option><option value="solo" ${m.attendance==="solo"?"selected":""}>1 persona</option></select>`:""}
         <input class="inp mini" list="dl-rutinas" placeholder="Rutina (ej. Sculpt 11)" data-action="cl-t" data-id="${m.id}" data-f="rutina" value="${esc(m.rutina||"")}">
         <input class="inp mini" list="dl-playlists" placeholder="Playlist" data-action="cl-t" data-id="${m.id}" data-f="playlist" value="${esc(m.playlist||"")}">
         ${state.routine?`<button class="btn sm ghost" data-action="cl-userutina" data-id="${m.id}" title="Poner el nombre de la rutina que tienes abierta">Usar rutina actual</button>`:""}
         ${m.confirmado===false?`<span class="status pending">pendiente</span><button class="btn sm" data-action="cl-confirm" data-id="${m.id}">Confirmar</button>`:""}
       </div>`:"";
-    return `<div class="check-row-wrap"><label class="check-row"><input type="checkbox" data-action="cl-fixed" data-slot="${s.id}" ${m?"checked":""}>${stChip(s.studio)}<span class="time num">${esc(s.time)}</span><span class="amount num">${money(amt)}</span></label>${det}</div>`;
+    return `<div class="check-row-wrap"><label class="check-row"><input type="checkbox" data-action="cl-fixed" data-slot="${s.id}" ${m?"checked":""}>${stChip(m?m.studio:s.studio)}<span class="time num">${esc(m&&m.time?m.time:s.time)}</span>${cambio?`<span class="hint">(normalmente ${esc(s.time)})</span>`:""}<span class="amount num">${money(amt)}</span></label>${det}</div>`;
   }).join("")||`<p class="hint">Sin horario fijo este día.</p>`;
   const extras=dayE.filter(e=>!used[e.id]).map(clExtraRow).join("")||`<p class="hint">Sin clases extra registradas este día.</p>`;
   const conf=dayE.filter(e=>e.confirmado!==false), pend=dayE.length-conf.length;
   const total=dayE.length?`Total del día: <strong>${conf.length} clase${conf.length===1?"":"s"}</strong> · <strong class="num">${money(sumConf(dayE))}</strong>${pend?" · "+pend+" pendiente(s) sin confirmar":""} — se suma a tu pago de la semana y del mes.`:"Sin clases registradas este día todavía.";
   return `${nav}<div id="cl-fixed">${fx}</div>
-    <div class="extra-head"><h3>Clases extra / suplencias ese día</h3><button class="btn sm ghost" data-action="cl-extra-add">+ agregar clase extra</button></div>
-    <p class="hint" style="margin:-2px 0 10px">El estudio de una clase extra es texto libre — escribe el nombre si suples en un estudio donde no eres coach fijo.</p>
+    <div class="extra-head"><h3>Clase extra o suplencia</h3><button class="btn sm ghost" data-action="cl-extra-add">+ Clase extra</button></div>
     <div id="cl-extras">${extras}</div>
     <datalist id="dl-studios">${STUDIOS.map(s=>`<option value="${s}">`).join("")}</datalist>
     <datalist id="dl-rutinas">${clRutinaOpts()}</datalist>
@@ -269,14 +274,15 @@ function clExtraRow(e){
   return `<div class="extra-row" data-id="${e.id}">
     ${f("Estudio","w-studio",`<input class="inp" list="dl-studios" placeholder="Nombre del estudio" data-action="cl-f" data-id="${e.id}" data-f="studio" value="${esc(e.studio||"")}">`)}
     ${f("Hora","w-time",`<input class="inp" type="time" data-action="cl-f" data-id="${e.id}" data-f="time" value="${e.time||""}">`)}
-    ${f("Tipo","w-tipo",`<select class="inp" data-action="cl-f" data-id="${e.id}" data-f="tipo"><option value="propia" ${e.tipo==="propia"?"selected":""}>Propia</option><option value="suplencia" ${e.tipo==="suplencia"?"selected":""}>Suplencia</option></select>`)}
     ${e.studio==="ALUNNA"?f("Asistencia","w-tipo",`<select class="inp" data-action="cl-f" data-id="${e.id}" data-f="attendance"><option value="grupo" ${e.attendance!=="solo"?"selected":""}>Grupo</option><option value="solo" ${e.attendance==="solo"?"selected":""}>1 persona</option></select>`):""}
-    ${f("Monto","w-amount",`<input class="inp" type="number" inputmode="decimal" data-action="cl-f" data-id="${e.id}" data-f="amount" value="${e.amount||0}">`)}
+    ${f("Me pagan","w-amount",`<input class="inp" type="number" inputmode="decimal" data-action="cl-f" data-id="${e.id}" data-f="amount" value="${e.amount||0}">`)}
+    <button class="del" data-action="cl-del" data-id="${e.id}" title="eliminar" aria-label="Eliminar clase">✕</button>
+    <details class="cl-extra-mas"><summary>Más (suplencia, rutina, nota)</summary>
+    ${f("Tipo","w-tipo",`<select class="inp" data-action="cl-f" data-id="${e.id}" data-f="tipo"><option value="propia" ${e.tipo==="propia"?"selected":""}>Propia</option><option value="suplencia" ${e.tipo==="suplencia"?"selected":""}>Suplencia</option></select>`)}
     ${f("Rutina","w-text",`<input class="inp" list="dl-rutinas" placeholder="ej. Sculpt 11" data-action="cl-t" data-id="${e.id}" data-f="rutina" value="${esc(e.rutina||"")}">`)}
     ${f("Playlist","w-text",`<input class="inp" list="dl-playlists" placeholder="nombre" data-action="cl-t" data-id="${e.id}" data-f="playlist" value="${esc(e.playlist||"")}">`)}
     <label class="check"><input type="checkbox" data-action="cl-f" data-id="${e.id}" data-f="confirmado" ${e.confirmado!==false?"checked":""}> confirmada</label>
-    ${f("Nota","w-nota",`<input class="inp" placeholder="opcional" data-action="cl-t" data-id="${e.id}" data-f="nota" value="${esc(e.nota||"")}">`)}
-    <button class="del" data-action="cl-del" data-id="${e.id}" title="eliminar" aria-label="Eliminar clase">✕</button></div>`;
+    ${f("Nota","w-nota",`<input class="inp" placeholder="opcional" data-action="cl-t" data-id="${e.id}" data-f="nota" value="${esc(e.nota||"")}">`)}</details></div>`;
 }
 function clEntriesHtml(){
   const E=CL_D().entries;
@@ -410,7 +416,7 @@ function clChange(a,t){
   if(a==="cl-fixed"){
     const slot=C.schedule.find(s=>s.id===t.dataset.slot); if(!slot) return true;
     const dayE=C.entries.filter(e=>e.date===CL.day);
-    if(t.checked){ clNewEntry({studio:slot.studio,time:slot.time,tipo:"propia",attendance:slot.studio==="ALUNNA"?"grupo":null}); render(); }
+    if(t.checked){ clNewEntry({studio:slot.studio,time:slot.time,tipo:"propia",slot:slot.id,attendance:slot.studio==="ALUNNA"?"grupo":null}); render(); }
     else {
       const m=clFixedMatch(dayE,slot,{}); if(m) clDelEntry(m.id);   // con deshacer: no se pierde la rutina/playlist de golpe
     }

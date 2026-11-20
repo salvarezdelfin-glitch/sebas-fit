@@ -23,7 +23,7 @@ window.ciTest=async function(){
   $('[data-action="ci-crear"]').click(); ok(state.programas.length===2&&state.programas[0].variantes===1,'crear ciclo desde la pantalla');
   state.programas=[p]; render(); $('[data-action="ci-load"][data-n="3"][data-v="B"]').click(); ok(state.screen==='planner'&&state.routine.ciclo&&state.routine.ciclo.n===3&&state.routine.ciclo.v==='B','abrir la clase B de la semana 3'); ok(!!$('.ci-banner')&&/Lo que sube esta semana/.test($('.ci-banner').textContent),'el planner muestra el banner del ciclo');
   // ---------- ciclo en curso ----------
-  state.screen='hoy'; render(); ok(/Crear ciclo/.test($('#app').textContent)&&/avancen semana a semana/.test($('#app').textContent),'sin ciclo, Clases invita a crear uno');
+  state.screen='hoy'; render(); ok(!/avancen semana a semana/.test($('#app').textContent),'sin ciclo, Clases no ocupa espacio con ciclos');
   Vault.data.sf.cicloActivo={id:p.id,inicio:addDays(ciMonday(todayStr()),-7)}; render(); tx=$('#app').textContent; ok(/Esta semana · Sube/.test(tx)&&/Semana 2 de 4/.test(tx),'Clases muestra la semana en curso ('+(tx.match(/Esta semana · \w+/)||[''])[0]+')');
   const C=CL_D(); C.schedule.length=0; C.entries.length=0; [['Lunes','SOHO','09:00'],['Martes','EUPHORIA','07:00'],['Miércoles','SOHO','09:00'],['Jueves','EJE','19:00']].forEach(([d,s,h])=>C.schedule.push({id:newId('s'),day:d,studio:s,time:h}));
   $('[data-action="ci-asignar"]').click(); const asig=C.entries.filter(e=>e.rutina); ok(asig.length===4,'pone la clase en las 4 clases de la semana ('+asig.length+')');
