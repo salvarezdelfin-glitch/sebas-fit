@@ -481,3 +481,15 @@ button,input,select,textarea,a{touch-action:manipulation}
 .fi-detalle>summary{cursor:pointer;color:var(--accent);font-weight:600;padding:12px 0;font-size:14px}
 .fi-detalle{border-top:1px solid var(--hairline-soft);margin-top:18px}
 .fi-clases-linea{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+
+/* dictado en vivo */
+.dict-on{margin:10px 0 0;padding:12px;border:1px solid var(--accent);border-radius:12px;background:var(--surface,transparent)}
+.dict-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dict-top .btn{margin-left:auto}
+.dict-rec{width:12px;height:12px;border-radius:50%;background:#e5484d;animation:dictPulso 1.2s ease-in-out infinite}
+@keyframes dictPulso{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+@media (prefers-reduced-motion:reduce){.dict-rec{animation:none}}
+.dict-vivo{margin-top:10px}
+.dict-vivo-blq{display:flex;flex-wrap:wrap;gap:6px}
+.dict-ayuda{margin-top:8px}
+.dict-ayuda>summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600}
